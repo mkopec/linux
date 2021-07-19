@@ -10546,6 +10546,8 @@ static bool is_dp_capable_without_timing_msa(struct dc *dc,
 		capable = (dpcd_data & DP_MSA_TIMING_PAR_IGNORED) ? true:false;
 	}
 
+	DRM_INFO("DPCD value: %d\n", dpcd_data);
+
 	return true;
 }
 
