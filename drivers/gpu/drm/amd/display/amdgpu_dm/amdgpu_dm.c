@@ -10543,22 +10543,6 @@ static bool is_dp_capable_without_timing_msa(struct dc *dc,
 				DP_DOWN_STREAM_PORT_COUNT,
 				&dpcd_data,
 				sizeof(dpcd_data))) {
-		dpcd_data = dpcd_data | DP_MSA_TIMING_PAR_IGNORED;
-		dm_helpers_dp_write_dpcd(
-				NULL,
-				amdgpu_dm_connector->dc_link,
-				DP_DOWN_STREAM_PORT_COUNT,
-				&dpcd_data,
-				sizeof(dpcd_data));
-	}
-
-	if (amdgpu_dm_connector->dc_link &&
-		dm_helpers_dp_read_dpcd(
-				NULL,
-				amdgpu_dm_connector->dc_link,
-				DP_DOWN_STREAM_PORT_COUNT,
-				&dpcd_data,
-				sizeof(dpcd_data))) {
 		capable = (dpcd_data & DP_MSA_TIMING_PAR_IGNORED) ? true:false;
 	}
 
