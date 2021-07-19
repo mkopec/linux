@@ -10546,7 +10546,7 @@ static bool is_dp_capable_without_timing_msa(struct dc *dc,
 		capable = (dpcd_data & DP_MSA_TIMING_PAR_IGNORED) ? true:false;
 	}
 
-	return capable;
+	return true;
 }
 
 static bool parse_edid_cea(struct amdgpu_dm_connector *aconnector,
