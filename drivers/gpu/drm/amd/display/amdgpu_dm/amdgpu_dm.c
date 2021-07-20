@@ -7740,8 +7740,7 @@ void amdgpu_dm_connector_init_helper(struct amdgpu_display_manager *dm,
 	    connector_type == DRM_MODE_CONNECTOR_eDP) {
 		drm_connector_attach_hdr_output_metadata_property(&aconnector->base);
 
-		if (!aconnector->mst_port)
-			drm_connector_attach_vrr_capable_property(&aconnector->base);
+		drm_connector_attach_vrr_capable_property(&aconnector->base);
 
 #ifdef CONFIG_DRM_AMD_DC_HDCP
 		if (adev->dm.hdcp_workqueue)
@@ -10667,6 +10666,7 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 
 
 	if (amdgpu_dm_connector->dc_sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT
+		|| amdgpu_dm_connector->dc_sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT_MST
 		|| amdgpu_dm_connector->dc_sink->sink_signal == SIGNAL_TYPE_EDP) {
 		bool edid_check_required = false;
 
