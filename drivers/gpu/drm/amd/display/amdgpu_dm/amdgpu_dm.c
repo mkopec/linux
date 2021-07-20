@@ -7742,6 +7742,8 @@ void amdgpu_dm_connector_init_helper(struct amdgpu_display_manager *dm,
 
 		if (!aconnector->mst_port)
 			drm_connector_attach_vrr_capable_property(&aconnector->base);
+		else
+			DRM_INFO("Not attaching vrr_capable because sink is MST\n");
 
 #ifdef CONFIG_DRM_AMD_DC_HDCP
 		if (adev->dm.hdcp_workqueue)
@@ -10667,6 +10669,7 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 
 
 	if (amdgpu_dm_connector->dc_sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT
+		|| amdgpu_dm_connector->dc_sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT_MST
 		|| amdgpu_dm_connector->dc_sink->sink_signal == SIGNAL_TYPE_EDP) {
 		bool edid_check_required = false;
 
