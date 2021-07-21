@@ -411,7 +411,7 @@ dm_dp_add_mst_connector(struct drm_dp_mst_topology_mgr *mgr,
 
 	connector->vrr_capable_property = master->base.vrr_capable_property;
 	if (connector->vrr_capable_property)
-		drm_connector_attach_vrr_capable_property(connector);
+		drm_object_attach_property(&connector->base, connector->vrr_capable_property, 0);
 
 	drm_object_attach_property(
 		&connector->base,

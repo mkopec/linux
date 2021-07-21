@@ -10546,6 +10546,9 @@ static bool is_dp_capable_without_timing_msa(struct dc *dc,
 		capable = (dpcd_data & DP_MSA_TIMING_PAR_IGNORED) ? true:false;
 	}
 
+	DRM_INFO("%s capable_without timing msa: %d\n",
+			amdgpu_dm_connector->base.name, capable);
+
 	return capable;
 }
 
@@ -10665,6 +10668,7 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 
 
 	if (amdgpu_dm_connector->dc_sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT
+		|| amdgpu_dm_connector->dc_sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT_MST
 		|| amdgpu_dm_connector->dc_sink->sink_signal == SIGNAL_TYPE_EDP) {
 		bool edid_check_required = false;
 
