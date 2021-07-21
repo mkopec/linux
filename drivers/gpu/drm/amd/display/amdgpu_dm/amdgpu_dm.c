@@ -10549,7 +10549,7 @@ static bool is_dp_capable_without_timing_msa(struct dc *dc,
 	DRM_INFO("%s capable_without timing msa: %d\n",
 			amdgpu_dm_connector->base.name, capable);
 
-	return true;
+	return capable;
 }
 
 static bool parse_edid_cea(struct amdgpu_dm_connector *aconnector,

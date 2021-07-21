@@ -750,5 +750,4 @@ void dm_helpers_mst_enable_stream_features(const struct dc_stream_state *stream)
 		dm_helpers_dp_write_dpcd(link->ctx, link, DP_DOWNSPREAD_CTRL,
 					 &new_downspread.raw,
 					 sizeof(new_downspread));
-
 }
