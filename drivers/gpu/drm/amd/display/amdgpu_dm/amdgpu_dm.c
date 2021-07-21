@@ -7742,8 +7742,6 @@ void amdgpu_dm_connector_init_helper(struct amdgpu_display_manager *dm,
 
 		if (!aconnector->mst_port)
 			drm_connector_attach_vrr_capable_property(&aconnector->base);
-		else
-			DRM_INFO("Not attaching vrr_capable because sink is MST\n");
 
 #ifdef CONFIG_DRM_AMD_DC_HDCP
 		if (adev->dm.hdcp_workqueue)
@@ -10548,7 +10546,8 @@ static bool is_dp_capable_without_timing_msa(struct dc *dc,
 		capable = (dpcd_data & DP_MSA_TIMING_PAR_IGNORED) ? true:false;
 	}
 
-	DRM_INFO("DPCD value: %d\n", dpcd_data);
+	DRM_INFO("%s capable_without timing msa: %d\n",
+			amdgpu_dm_connector->base.name, capable);
 
 	return true;
 }
