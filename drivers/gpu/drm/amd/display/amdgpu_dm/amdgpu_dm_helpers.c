@@ -737,24 +737,18 @@ void dm_helpers_mst_enable_stream_features(const struct dc_stream_state *stream)
 	if (link->aux_access_disabled)
 		return;
 
-	DRM_INFO("aux access not disabled\n");
-
 	if (!dm_helpers_dp_read_dpcd(link->ctx, link, DP_DOWNSPREAD_CTRL,
 				     &old_downspread.raw,
 				     sizeof(old_downspread)))
 		return;
 
-	DRM_INFO("DPCD read\n");
-
 	new_downspread.raw = old_downspread.raw;
 	new_downspread.bits.IGNORE_MSA_TIMING_PARAM =
-		(stream->ignore_msa_timing_param) ? 1 : 1;
+		(stream->ignore_msa_timing_param) ? 1 : 0;
 
 	if (new_downspread.raw != old_downspread.raw)
 		dm_helpers_dp_write_dpcd(link->ctx, link, DP_DOWNSPREAD_CTRL,
 					 &new_downspread.raw,
 					 sizeof(new_downspread));
 
-		
-	DRM_INFO("DPCD written\n");
 }
