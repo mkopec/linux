@@ -23,6 +23,8 @@
 #define IRQ_RESOURCE_APIC	2
 #define IRQ_RESOURCE_AUTO   3
 
+#define IRQ_OPTIONAL		BIT(2)
+
 enum smi_bus_type {
 	SMI_I2C,
 	SMI_SPI,
@@ -59,7 +61,7 @@ static int smi_get_irq(struct platform_device *pdev, struct acpi_device *adev,
 			dev_dbg(&pdev->dev, "Using gpio irq\n");
 			break;
 		}
-		ret = platform_get_irq(pdev, inst->irq_idx);
+		ret = platform_get_irq_optional(pdev, inst->irq_idx);
 		if (ret > 0) {
 			dev_dbg(&pdev->dev, "Using platform irq\n");
 			break;
@@ -69,12 +71,12 @@ static int smi_get_irq(struct platform_device *pdev, struct acpi_device *adev,
 		ret = acpi_dev_gpio_irq_get(adev, inst->irq_idx);
 		break;
 	case IRQ_RESOURCE_APIC:
-		ret = platform_get_irq(pdev, inst->irq_idx);
+		ret = platform_get_irq_optional(pdev, inst->irq_idx);
 		break;
 	default:
 		return 0;
 	}
-	if (ret < 0)
+	if (ret < 0 && !inst->flags & IRQ_OPTIONAL)
 		return dev_err_probe(&pdev->dev, ret, "Error requesting irq at index %d\n",
 				     inst->irq_idx);
 
@@ -210,6 +212,8 @@ static int smi_i2c_probe(struct platform_device *pdev, struct smi *smi,
 		board_info.dev_name = name;
 
 		ret = smi_get_irq(pdev, adev, &inst_array[i]);
+		if (ret < 0 && inst_array[i].flags & IRQ_OPTIONAL)
+			ret = smi_get_irq(pdev, adev, &inst_array[0]);
 		if (ret < 0)
 			goto error;
 		board_info.irq = ret;
@@ -309,10 +313,11 @@ static const struct smi_node bsg2150_data = {
 
 static const struct smi_node int3515_data = {
 	.instances = {
-		{ "tps6598x", IRQ_RESOURCE_APIC, 0 },
-		{ "tps6598x", IRQ_RESOURCE_APIC, 1 },
-		{ "tps6598x", IRQ_RESOURCE_APIC, 2 },
-		{ "tps6598x", IRQ_RESOURCE_APIC, 3 },
+		{ "tps6598x", IRQ_RESOURCE_AUTO, 0 },
+		/* On some platforms only one shared GpioInt is defined */
+		{ "tps6598x", IRQ_RESOURCE_AUTO | IRQ_OPTIONAL, 1 },
+		{ "tps6598x", IRQ_RESOURCE_AUTO | IRQ_OPTIONAL, 2 },
+		{ "tps6598x", IRQ_RESOURCE_AUTO | IRQ_OPTIONAL, 3 },
 		{}
 	},
 	.bus_type = SMI_I2C,
