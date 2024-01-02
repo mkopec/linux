@@ -10799,6 +10799,9 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 		}
 	}
 
+	if (sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT_MST)
+		freesync_capable = true; // FIXME hack lol
+
 update:
 	if (dm_con_state)
 		dm_con_state->freesync_capable = freesync_capable;

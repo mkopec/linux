@@ -1069,17 +1069,16 @@ bool dm_helpers_dmub_outbox_interrupt_control(struct dc_context *ctx, bool enabl
 
 void dm_helpers_mst_enable_stream_features(const struct dc_stream_state *stream)
 {
-	/* TODO: virtual DPCD */
-	struct dc_link *link = stream->link;
+	struct amdgpu_dm_connector *aconnector =
+		(struct amdgpu_dm_connector *)stream->dm_stream_context;
+
+	struct drm_dp_mst_port *port = aconnector->mst_output_port;
 	union down_spread_ctrl old_downspread;
 	union down_spread_ctrl new_downspread;
 
-	if (link->aux_access_disabled)
-		return;
-
-	if (!dm_helpers_dp_read_dpcd(link->ctx, link, DP_DOWNSPREAD_CTRL,
-				     &old_downspread.raw,
-				     sizeof(old_downspread)))
+	if (!drm_dp_dpcd_read(&port->aux, DP_DOWNSPREAD_CTRL,
+			      &old_downspread.raw,
+			      sizeof(old_downspread)))
 		return;
 
 	new_downspread.raw = old_downspread.raw;
@@ -1087,9 +1086,31 @@ void dm_helpers_mst_enable_stream_features(const struct dc_stream_state *stream)
 		(stream->ignore_msa_timing_param) ? 1 : 0;
 
 	if (new_downspread.raw != old_downspread.raw)
-		dm_helpers_dp_write_dpcd(link->ctx, link, DP_DOWNSPREAD_CTRL,
-					 &new_downspread.raw,
-					 sizeof(new_downspread));
+		drm_dp_dpcd_write(&port->aux, DP_DOWNSPREAD_CTRL,
+				  &new_downspread.raw,
+				  sizeof(new_downspread));
+
+	///* TODO: virtual DPCD */
+	//struct dc_link *link = stream->link;
+	//union down_spread_ctrl old_downspread;
+	//union down_spread_ctrl new_downspread;
+
+	//if (link->aux_access_disabled)
+	//	return;
+
+	//if (!dm_helpers_dp_read_dpcd(link->ctx, link, DP_DOWNSPREAD_CTRL,
+	//			     &old_downspread.raw,
+	//			     sizeof(old_downspread)))
+	//	return;
+
+	//new_downspread.raw = old_downspread.raw;
+	//new_downspread.bits.IGNORE_MSA_TIMING_PARAM =
+	//	(stream->ignore_msa_timing_param) ? 1 : 0;
+
+	//if (new_downspread.raw != old_downspread.raw)
+	//	dm_helpers_dp_write_dpcd(link->ctx, link, DP_DOWNSPREAD_CTRL,
+	//				 &new_downspread.raw,
+	//				 sizeof(new_downspread));
 }
 
 bool dm_helpers_dp_handle_test_pattern_request(
