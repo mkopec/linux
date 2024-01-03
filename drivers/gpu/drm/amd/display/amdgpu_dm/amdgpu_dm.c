@@ -10712,7 +10712,7 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 		|| sink->sink_signal == SIGNAL_TYPE_EDP) {
 		bool edid_check_required = false;
 
-		if (edid)
+		if (edid) {
 			edid_check_required = is_dp_capable_without_timing_msa(
 						adev->dm.dc,
 						amdgpu_dm_connector) ||
@@ -10968,6 +10968,7 @@ int amdgpu_dm_process_dmub_set_config_sync(
 bool check_seamless_boot_capability(struct amdgpu_device *adev)
 {
 	switch (adev->ip_versions[DCE_HWIP][0]) {
+	case IP_VERSION(2, 1, 0): /* Renoir family */
 	case IP_VERSION(3, 0, 1):
 		if (!adev->mman.keep_stolen_vga_memory)
 			return true;
