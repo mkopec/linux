@@ -10712,14 +10712,11 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 		|| sink->sink_signal == SIGNAL_TYPE_EDP) {
 		bool edid_check_required = false;
 
-		if (edid) {
-			if (sink->signal == SIGNAL_TYPE_DISPLAY_PORT_MST) {
-				edid_check_required = true; // TODO actually check the remote DPCD
-			} else {
-				edid_check_required = is_dp_capable_without_timing_msa(
-							adev->dm.dc,
-							amdgpu_dm_connector);
-			}
+		if (edid)
+			edid_check_required = is_dp_capable_without_timing_msa(
+						adev->dm.dc,
+						amdgpu_dm_connector) ||
+						sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT_MST;
 		}
 
 		if (edid_check_required == true && (edid->version > 1 ||
