@@ -1083,7 +1083,8 @@ void dm_helpers_mst_enable_stream_features(const struct dc_stream_state *stream)
 
 	new_downspread.raw = old_downspread.raw;
 	new_downspread.bits.IGNORE_MSA_TIMING_PARAM =
-		(stream->ignore_msa_timing_param) ? 1 : 0;
+		1;
+//		(stream->ignore_msa_timing_param) ? 1 : 0;
 
 	if (new_downspread.raw != old_downspread.raw)
 		drm_dp_dpcd_write(&port->aux, DP_DOWNSPREAD_CTRL,
