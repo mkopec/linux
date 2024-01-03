@@ -10708,6 +10708,7 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 		goto update;
 
 	if (sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT
+		|| sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT_MST
 		|| sink->sink_signal == SIGNAL_TYPE_EDP) {
 		bool edid_check_required = false;
 
@@ -10798,9 +10799,6 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 			connector->display_info.monitor_range.max_vfreq = vsdb_info.max_refresh_rate_hz;
 		}
 	}
-
-	if (sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT_MST)
-		freesync_capable = true; // FIXME hack lol
 
 update:
 	if (dm_con_state)
