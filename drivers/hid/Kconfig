@@ -412,6 +412,19 @@ config HID_GLORIOUS
 	  Support for Glorious PC Gaming Race mice such as
 	  the Glorious Model O, O- and D.
 
+config HID_HIMAX
+	tristate "Himax HX83102J touchscreen"
+	depends on HID
+	depends on SPI
+	help
+	  Say Y here if you have a Himax HX83102J touch and display driver
+	  integrated (TDDI) controller whose touch function is connected
+	  over SPI. The driver reads HID reports from the controller and
+	  passes them to the HID core.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called hid-himax.
+
 config HID_HOLTEK
 	tristate "Holtek HID devices"
 	depends on USB_HID
