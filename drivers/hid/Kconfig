@@ -412,6 +412,13 @@ config HID_GLORIOUS
 	  Support for Glorious PC Gaming Race mice such as
 	  the Glorious Model O, O- and D.
 
+config HID_HIMAX
+	tristate "Himax hx83102j touchscreen"
+	depends on HID
+	depends on SPI
+	help
+	  Support for Himax TDDI hx83102j touchscreen.
+
 config HID_HOLTEK
 	tristate "Holtek HID devices"
 	depends on USB_HID
