@@ -11734,6 +11734,7 @@ M:	Michał Kopeć <michal@nozomi.space>
 L:	linux-input@vger.kernel.org
 S:	Maintained
 F:	Documentation/devicetree/bindings/input/touchscreen/himax,hx83102j.yaml
+F:	drivers/hid/hid-himax.*
 
 HIMAX HX83112B TOUCHSCREEN SUPPORT
 M:	Job Noorman <job@noorman.info>
