@@ -245,12 +245,15 @@ struct dc_edid_caps {
 
 	uint32_t max_tmds_clk_mhz;
 
-	/*HDMI 2.0 caps*/
+	/* HDMI 2.0 caps */
 	bool lte_340mcsc_scramble;
 
 	/* HDMI 2.1 caps */
 	struct dc_hdmi_frl_caps frl_caps;
 	struct dc_hdmi_dsc_caps dsc_caps;
+	bool allm;
+	bool fva;
+	bool hdmi_vrr;
 
 	bool edid_hdmi;
 	bool hdr_supported;
