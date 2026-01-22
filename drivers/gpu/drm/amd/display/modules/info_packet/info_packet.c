@@ -633,6 +633,14 @@ static void build_vtem_infopacket_data(const struct dc_stream_state *stream,
 
 	vrr_active = vrr->state == VRR_STATE_ACTIVE_VARIABLE ||
 		     vrr->state == VRR_STATE_ACTIVE_FIXED;
+	/*
+	 * Enables FreeSync-like behavior by keeping HDMI VRR signalling active
+	 * in fixed refresh rate conditions like normal desktop work/web browsing.
+	 * Functinally behaves like non-VRR mode by keeping the actual refresh
+	 * rate fixed.
+	 */
+	if (stream->freesync_on_desktop)
+		vrr_active |= vrr->state == VRR_STATE_INACTIVE;
 
 	infopacket->sb[VTEM_MD0] = VTEM_M_CONST << VTEM_M_CONST_BIT;
 	infopacket->sb[VTEM_MD0] |= VTEM_FVA_FACTOR << VTEM_FVA_BIT;
