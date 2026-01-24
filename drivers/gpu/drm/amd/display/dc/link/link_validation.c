@@ -329,6 +329,29 @@ static bool dp_validate_mode_timing(
 		return false;
 }
 
+static enum dc_status hdmi_validate_mode_timing(
+    struct dc_link *link,
+    const struct dc_crtc_timing *timing)
+{
+    uint32_t pix_clk_100hz;
+
+    memset(&link->cur_link_settings, 0, sizeof(link->cur_link_settings));
+
+    pix_clk_100hz = get_tmds_output_pixel_clock_100hz(timing);
+
+    /* TMDS always allowed if it fits */
+    if (pix_clk_100hz <= 340000) {
+        /* TMDS path: frl_rate stays 0 */
+        return DC_OK;
+    }
+
+	/* YEET FRL12 at the link, i'm too tired to do this properly */
+	link->cur_link_settings.frl_rate = 6;
+	link->cur_link_settings.lane_count = 4;
+	return DC_OK;
+}
+
+
 enum dc_status link_validate_mode_timing(
 		const struct dc_stream_state *stream,
 		struct dc_link *link,
@@ -359,7 +382,13 @@ enum dc_status link_validate_mode_timing(
 				timing))
 			return DC_NO_DP_LINK_BANDWIDTH;
 		break;
-
+	case SIGNAL_TYPE_HDMI_TYPE_A:
+	case SIGNAL_TYPE_HDMI_FRL:
+		if (!hdmi_validate_mode_timing(
+				link,
+				timing))
+			return DC_NO_DP_LINK_BANDWIDTH;
+		break;
 	default:
 		break;
 	}

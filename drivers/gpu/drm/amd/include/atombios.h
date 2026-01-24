@@ -1588,6 +1588,7 @@ typedef struct _DIG_TRANSMITTER_CONTROL_PARAMETERS_V1_6
 #define ATOM_TRANSMITTER_DIGMODE_V6_DP                      0
 #define ATOM_TRANSMITTER_DIGMODE_V6_DVI                     2
 #define ATOM_TRANSMITTER_DIGMODE_V6_HDMI                    3
+#define ATOM_TRANSMITTER_DIGMODE_V6_HDMI_FRL                4
 #define ATOM_TRANSMITTER_DIGMODE_V6_DP_MST                  5
 
 //ucHPDSel

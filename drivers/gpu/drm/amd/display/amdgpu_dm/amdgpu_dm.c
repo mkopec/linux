@@ -3289,6 +3289,12 @@ static void emulated_link_detect(struct dc_link *link)
 		break;
 	}
 
+	case SIGNAL_TYPE_HDMI_FRL: {
+		sink_caps.transaction_type = DDC_TRANSACTION_TYPE_I2C;
+		sink_caps.signal = SIGNAL_TYPE_HDMI_FRL;
+		break;
+	}
+
 	case SIGNAL_TYPE_DVI_SINGLE_LINK: {
 		sink_caps.transaction_type = DDC_TRANSACTION_TYPE_I2C;
 		sink_caps.signal = SIGNAL_TYPE_DVI_SINGLE_LINK;
@@ -7397,7 +7403,7 @@ create_stream_for_sink(struct drm_connector *connector,
 
 	update_stream_signal(stream, sink);
 
-	if (stream->signal == SIGNAL_TYPE_HDMI_TYPE_A)
+	if (dc_is_hdmi_signal(stream->signal))
 		mod_build_hf_vsif_infopacket(stream, &stream->vsp_infopacket);
 
 	if (stream->signal == SIGNAL_TYPE_DISPLAY_PORT ||
@@ -8569,6 +8575,7 @@ static int to_drm_connector_type(enum signal_type st, uint32_t connector_id)
 {
 	switch (st) {
 	case SIGNAL_TYPE_HDMI_TYPE_A:
+	case SIGNAL_TYPE_HDMI_FRL:
 		return DRM_MODE_CONNECTOR_HDMIA;
 	case SIGNAL_TYPE_EDP:
 		return DRM_MODE_CONNECTOR_eDP;
@@ -13313,7 +13320,7 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 			amdgpu_dm_connector->as_type = ADAPTIVE_SYNC_TYPE_EDP;
 		}
 
-	} else if (drm_edid && sink->sink_signal == SIGNAL_TYPE_HDMI_TYPE_A) {
+	} else if (drm_edid && dc_is_hdmi_frl_signal(sink->sink_signal)) {
 		i = parse_hdmi_amd_vsdb(amdgpu_dm_connector, edid, &vsdb_info);
 		if (i >= 0 && vsdb_info.freesync_supported) {
 			amdgpu_dm_connector->min_vfreq = vsdb_info.min_refresh_rate_hz;

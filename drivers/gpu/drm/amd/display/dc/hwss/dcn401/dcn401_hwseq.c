@@ -908,6 +908,7 @@ static enum phyd32clk_clock_source get_phyd32clk_src(struct dc_link *link)
 static void dcn401_enable_stream_calc(
 		struct pipe_ctx *pipe_ctx,
 		int *dp_hpo_inst,
+		int *hdmi_hpo_inst,
 		enum phyd32clk_clock_source *phyd32clk,
 		unsigned int *tmds_div,
 		uint32_t *early_control)
@@ -923,6 +924,9 @@ static void dcn401_enable_stream_calc(
 		*dp_hpo_inst = pipe_ctx->stream_res.hpo_dp_stream_enc->inst;
 		*phyd32clk = get_phyd32clk_src(pipe_ctx->stream->link);
 	}
+
+	if (dc_is_hdmi_frl_signal(pipe_ctx->stream->signal))
+		*hdmi_hpo_inst = pipe_ctx->stream_res.hpo_hdmi_stream_enc->inst;
 
 	if (dc_is_tmds_signal(pipe_ctx->stream->signal))
 		dcn401_calculate_dccg_tmds_div_value(pipe_ctx, tmds_div);
@@ -953,6 +957,7 @@ void dcn401_enable_stream(struct pipe_ctx *pipe_ctx)
 	struct dccg *dccg = dc->res_pool->dccg;
 	enum phyd32clk_clock_source phyd32clk = PHYD32CLKA;
 	int dp_hpo_inst = 0;
+	int hdmi_hpo_inst = 0;
 	unsigned int tmds_div = PIXEL_RATE_DIV_NA;
 	unsigned int unused_div = PIXEL_RATE_DIV_NA;
 	struct link_encoder *link_enc = pipe_ctx->link_res.dio_link_enc;
@@ -961,7 +966,7 @@ void dcn401_enable_stream(struct pipe_ctx *pipe_ctx)
 	if (!dc->config.unify_link_enc_assignment)
 		link_enc = link_enc_cfg_get_link_enc(link);
 
-	dcn401_enable_stream_calc(pipe_ctx, &dp_hpo_inst, &phyd32clk,
+	dcn401_enable_stream_calc(pipe_ctx, &dp_hpo_inst, &hdmi_hpo_inst, &phyd32clk,
 				&tmds_div, &early_control);
 
 	if (dc_is_dp_signal(pipe_ctx->stream->signal) || dc_is_virtual_signal(pipe_ctx->stream->signal)) {
@@ -976,6 +981,8 @@ void dcn401_enable_stream(struct pipe_ctx *pipe_ctx)
 			dccg->funcs->enable_symclk_se(dccg, stream_enc->stream_enc_inst,
 					link_enc->transmitter - TRANSMITTER_UNIPHY_A);
 		}
+	} else if (dc_is_hdmi_frl_signal(pipe_ctx->stream->signal)) {
+		dccg->funcs->set_hdmistreamclk(dccg, DPREFCLK, tg->inst, hdmi_hpo_inst);
 	}
 
 	if (dc->res_pool->dccg->funcs->set_pixel_rate_div) {

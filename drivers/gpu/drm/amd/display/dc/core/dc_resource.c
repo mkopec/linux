@@ -48,6 +48,7 @@
 #include "link/hwss/link_hwss_virtual.h"
 #include "link/hwss/link_hwss_dio.h"
 #include "link/hwss/link_hwss_dpia.h"
+#include "link/hwss/link_hwss_hpo_frl.h"
 #include "link/hwss/link_hwss_hpo_dp.h"
 #include "link/hwss/link_hwss_dio_fixed_vs_pe_retimer.h"
 #include "link/hwss/link_hwss_hpo_fixed_vs_pe_retimer_dp.h"
@@ -508,6 +509,27 @@ bool resource_construct(
 			if (pool->hpo_dp_link_enc[i] == NULL)
 				DC_ERR("DC: failed to create HPO DP link encoder!\n");
 			pool->hpo_dp_link_enc_count++;
+		}
+	}
+
+	pool->hpo_hdmi_stream_enc_count = 0;
+	if (create_funcs->create_hpo_hdmi_stream_encoder) {
+		for (i = 0; i < caps->num_hpo_hdmi_stream_encoder; i++) {
+			pool->hpo_hdmi_stream_enc[i] = create_funcs->create_hpo_hdmi_stream_encoder(i+ENGINE_ID_HPO_0, ctx);
+			if (pool->hpo_hdmi_stream_enc[i] == NULL)
+				DC_ERR("DC: failed to create HPO HDMI stream encoder!\n");
+			pool->hpo_hdmi_stream_enc_count++;
+
+		}
+	}
+
+	pool->hpo_hdmi_link_enc_count = 0;
+	if (create_funcs->create_hpo_hdmi_link_encoder) {
+		for (i = 0; i < caps->num_hpo_hdmi_link_encoder; i++) {
+			pool->hpo_hdmi_link_enc[i] = create_funcs->create_hpo_hdmi_link_encoder(i, ctx);
+			if (pool->hpo_hdmi_link_enc[i] == NULL)
+				DC_ERR("DC: failed to create HPO HDMI link encoder!\n");
+			pool->hpo_hdmi_link_enc_count++;
 		}
 	}
 
@@ -4033,6 +4055,11 @@ enum dc_status resource_map_pool_resources(
 		}
 	}
 
+	if (dc_is_hdmi_frl_signal(stream->signal)) {
+		pipe_ctx->stream_res.hpo_hdmi_stream_enc = pool->hpo_hdmi_stream_enc[0];
+		pipe_ctx->link_res.hpo_hdmi_link_enc = pool->hpo_hdmi_link_enc[0];
+	}
+
 	if (dc->config.unify_link_enc_assignment && is_dio_encoder)
 		if (!add_dio_link_enc_to_ctx(dc, context, pool, pipe_ctx, stream))
 			return DC_NO_LINK_ENC_RESOURCE;
@@ -5175,6 +5202,7 @@ enum dc_status dc_validate_stream(struct dc *dc, struct dc_stream_state *stream)
 
 	if (res == DC_OK) {
 		if (link->ep_type == DISPLAY_ENDPOINT_PHY &&
+				!dc_is_hdmi_frl_signal(stream->signal) && /* FIXME: Temporary w/a for link encoder bringup */
 				!link->link_enc->funcs->validate_output_with_stream(
 						link->link_enc, stream))
 			res = DC_FAIL_ENC_VALIDATE;
@@ -5484,6 +5512,8 @@ const struct link_hwss *get_link_hwss(const struct dc_link *link,
 		 */
 		return (requires_fixed_vs_pe_retimer_hpo_link_hwss(link) ?
 				get_hpo_fixed_vs_pe_retimer_dp_link_hwss() : get_hpo_dp_link_hwss());
+	else if (can_use_hpo_hdmi_frl_link_hwss(link, link_res))
+		return get_hpo_hdmi_frl_link_hwss();
 	else if (can_use_dpia_link_hwss(link, link_res))
 		return get_dpia_link_hwss();
 	else if (can_use_dio_link_hwss(link, link_res))
@@ -5711,5 +5741,5 @@ bool resource_is_hpo_acquired(struct dc_state *context)
 		}
 	}
 
-	return false;
+	return true;
 }

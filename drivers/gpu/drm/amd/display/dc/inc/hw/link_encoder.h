@@ -241,8 +241,24 @@ struct hpo_dp_link_enc_state {
 	uint32_t   vc_rate_y[4];
 };
 
+struct hpo_hdmi_link_enc_state {
+	uint32_t link_enc_enabled;
+	uint32_t lane_count;
+	uint32_t training_enabled;
+	uint32_t scrambler_disabled;
+};
+
 struct hpo_dp_link_encoder {
 	const struct hpo_dp_link_encoder_funcs *funcs;
+	struct dc_context *ctx;
+	int inst;
+	enum engine_id preferred_engine;
+	enum transmitter transmitter;
+	enum hpd_source_id hpd_source;
+};
+
+struct hpo_hdmi_link_encoder {
+	const struct hpo_hdmi_link_encoder_funcs *funcs;
 	struct dc_context *ctx;
 	int inst;
 	enum engine_id preferred_engine;
@@ -291,6 +307,35 @@ struct hpo_dp_link_encoder_funcs {
 		struct hpo_dp_link_encoder *enc,
 		const struct dc_link_settings *link_settings,
 		uint8_t ffe_preset);
+};
+
+struct hpo_hdmi_link_encoder_funcs {
+
+	/* Enable / disable HDMI FRL link encoder */
+	void (*link_enable)(
+		struct hpo_hdmi_link_encoder *enc,
+		uint8_t lane_count);
+
+	void (*link_disable)(
+		struct hpo_hdmi_link_encoder *enc);
+
+	void (*configure_transmitter)(
+		struct hpo_hdmi_link_encoder *enc,
+		const struct dc_link *link,
+		uint8_t frl_rate,
+		enum transmitter transmitter,
+		enum hpd_source_id hpd_source);
+
+	void (*set_training_enable)(
+		struct hpo_hdmi_link_encoder *enc,
+		bool enable);
+
+	void (*set_training_patterns)(
+		struct hpo_hdmi_link_encoder *enc,
+		uint8_t lane0_ltp,
+		uint8_t lane1_ltp,
+		uint8_t lane2_ltp,
+		uint8_t lane3_ltp);
 };
 
 #endif /* LINK_ENCODER_H_ */

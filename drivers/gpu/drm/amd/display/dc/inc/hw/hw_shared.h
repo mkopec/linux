@@ -78,6 +78,8 @@
 #define MAX_DWB_PIPES	1
 #define MAX_HPO_DP2_ENCODERS	4
 #define MAX_HPO_DP2_LINK_ENCODERS	4
+#define MAX_HPO_HDMI_ENCODERS	1
+#define MAX_HPO_HDMI_LINK_ENCODERS	1
 
 /* Pipe topology snapshot structures */
 #define MAX_TOPOLOGY_SNAPSHOTS 4

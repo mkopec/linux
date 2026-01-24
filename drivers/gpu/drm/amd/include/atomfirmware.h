@@ -97,6 +97,7 @@ enum atom_encode_mode_def
   ATOM_ENCODER_MODE_LVDS        =1,
   ATOM_ENCODER_MODE_DVI         =2,
   ATOM_ENCODER_MODE_HDMI        =3,
+  ATOM_ENCODER_MODE_HDMI_FRL    =4,
   ATOM_ENCODER_MODE_DP_AUDIO    =5,
   ATOM_ENCODER_MODE_DP_MST      =5,
   ATOM_ENCODER_MODE_CRT         =15,

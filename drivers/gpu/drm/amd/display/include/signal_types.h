@@ -42,6 +42,7 @@ enum signal_type {
 	SIGNAL_TYPE_DISPLAY_PORT_MST	= (1 << 6),
 	SIGNAL_TYPE_EDP			= (1 << 7),
 	SIGNAL_TYPE_VIRTUAL		= (1 << 9),	/* Virtual Display */
+	SIGNAL_TYPE_HDMI_FRL		= (1 << 10),
 };
 
 static inline const char *signal_type_to_string(const int type)
@@ -65,6 +66,8 @@ static inline const char *signal_type_to_string(const int type)
 		return "Display Port: MST";
 	case SIGNAL_TYPE_EDP:
 		return "Embedded Display Port";
+	case SIGNAL_TYPE_HDMI_FRL:
+		return "HDMI: FRL";
 	case SIGNAL_TYPE_VIRTUAL:
 		return "Virtual";
 	default:
@@ -78,9 +81,15 @@ static inline bool dc_is_hdmi_tmds_signal(enum signal_type signal)
 	return (signal == SIGNAL_TYPE_HDMI_TYPE_A);
 }
 
+static inline bool dc_is_hdmi_frl_signal(enum signal_type signal)
+{
+	return (signal == SIGNAL_TYPE_HDMI_FRL);
+}
+
 static inline bool dc_is_hdmi_signal(enum signal_type signal)
 {
-	return (signal == SIGNAL_TYPE_HDMI_TYPE_A);
+	return (signal == SIGNAL_TYPE_HDMI_TYPE_A ||
+		signal == SIGNAL_TYPE_HDMI_FRL);
 }
 
 static inline bool dc_is_dp_sst_signal(enum signal_type signal)

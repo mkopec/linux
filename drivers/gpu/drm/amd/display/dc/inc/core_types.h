@@ -288,6 +288,12 @@ struct resource_pool {
 	struct hpo_dp_stream_encoder *hpo_dp_stream_enc[MAX_HPO_DP2_ENCODERS];
 	unsigned int hpo_dp_link_enc_count;
 	struct hpo_dp_link_encoder *hpo_dp_link_enc[MAX_HPO_DP2_LINK_ENCODERS];
+
+	unsigned int hpo_hdmi_stream_enc_count;
+	struct hpo_hdmi_stream_encoder *hpo_hdmi_stream_enc[1];
+	unsigned int hpo_hdmi_link_enc_count;
+	struct hpo_hdmi_link_encoder *hpo_hdmi_link_enc[1];
+
 	struct dc_3dlut *mpc_lut[MAX_PIPES];
 	struct dc_transfer_func *mpc_shaper[MAX_PIPES];
 	struct dc_rmcm_3dlut rmcm_3dlut[MAX_RMCM_INST];
@@ -351,6 +357,7 @@ struct stream_resource {
 	struct timing_generator *tg;
 	struct stream_encoder *stream_enc;
 	struct hpo_dp_stream_encoder *hpo_dp_stream_enc;
+	struct hpo_hdmi_stream_encoder *hpo_hdmi_stream_enc;
 	struct audio *audio;
 
 	struct pixel_clk_params pix_clk_params;
@@ -393,6 +400,7 @@ struct plane_resource {
 struct link_resource {
 	struct link_encoder *dio_link_enc;
 	struct hpo_dp_link_encoder *hpo_dp_link_enc;
+	struct hpo_hdmi_link_encoder *hpo_hdmi_link_enc;
 };
 
 struct link_config {

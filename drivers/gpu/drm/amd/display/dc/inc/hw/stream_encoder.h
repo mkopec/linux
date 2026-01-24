@@ -288,6 +288,12 @@ struct hpo_dp_stream_encoder_state {
 	uint32_t mapped_to_link_enc;
 };
 
+struct hpo_hdmi_stream_encoder_state {
+	uint32_t stream_enc_enabled;
+	uint32_t otg_inst;
+	uint32_t pixel_encoding;
+};
+
 struct hpo_dp_stream_encoder {
 	const struct hpo_dp_stream_encoder_funcs *funcs;
 	struct dc_context *ctx;
@@ -296,6 +302,17 @@ struct hpo_dp_stream_encoder {
 	enum engine_id id;
 	struct vpg *vpg;
 	struct apg *apg;
+};
+
+struct hpo_hdmi_stream_encoder {
+	const struct hpo_hdmi_stream_encoder_funcs *funcs;
+	struct dc_context *ctx;
+	struct dc_bios *bp;
+	uint32_t inst;
+	enum engine_id id;
+
+	struct vpg *vpg;
+	struct afmt *afmt;
 };
 
 struct hpo_dp_stream_encoder_funcs {
@@ -361,5 +378,41 @@ struct hpo_dp_stream_encoder_funcs {
 			struct hpo_dp_stream_encoder *enc,
 			uint16_t width);
 };
+
+struct hpo_hdmi_stream_encoder_funcs {
+
+	/* Core lifecycle */
+	void (*enable)(
+		struct hpo_hdmi_stream_encoder *enc,
+		uint8_t source_select);
+
+	void (*disable)(
+		struct hpo_hdmi_stream_encoder *enc);
+
+	void (*setup_stream_attribute)(
+		struct hpo_hdmi_stream_encoder *enc,
+		struct dc_crtc_timing *crtc_timing,
+		enum dc_color_space output_color_space);
+
+	void (*update_hdmi_info_packets)(
+		struct hpo_hdmi_stream_encoder *enc,
+		const struct encoder_info_frame *info_frame);
+
+	void (*stop_hdmi_info_packets)(
+		struct hpo_hdmi_stream_encoder *enc);
+
+	void (*hdmi_audio_setup)(
+		struct hpo_hdmi_stream_encoder *enc,
+		unsigned int az_inst,
+		struct audio_info *info,
+		struct audio_crtc_info *audio_crtc_info);
+
+	void (*hdmi_audio_enable)(
+		struct hpo_hdmi_stream_encoder *enc);
+
+	void (*hdmi_audio_disable)(
+		struct hpo_hdmi_stream_encoder *enc);
+};
+
 
 #endif /* STREAM_ENCODER_H_ */

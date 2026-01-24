@@ -1186,6 +1186,10 @@ struct hw_sequencer_funcs {
 			uint32_t pixel_clock);
 	void (*enable_analog_link_output)(struct dc_link *link,
 			uint32_t pixel_clock);
+	void (*enable_frl_link_output)(struct dc_link *link,
+			const struct link_resource *link_res,
+			enum dc_color_depth color_depth,
+			uint32_t pixel_clock);
 	void (*disable_link_output)(struct dc_link *link,
 			const struct link_resource *link_res,
 			enum signal_type signal);
