@@ -13352,6 +13352,12 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 		/* Some eDP panels only have the refresh rate range info in DisplayID */
 		if (is_monitor_range_invalid(connector))
 			parse_edid_displayid_vrr(connector, edid);
+		/*
+		 * Many monitors expose AMD vsdb in CAE even for DP and their
+		 * monitor ranges do not contain Range Limits Only flag
+		 */
+		if (is_monitor_range_invalid(connector))
+			monitor_range_from_vsdb(&connector->display_info, &vsdb_info);
 
 		if (dpcd_caps.allow_invalid_MSA_timing_param)
 			freesync_capable = copy_range_to_amdgpu_connector(connector);
