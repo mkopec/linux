@@ -13289,6 +13289,34 @@ static bool copy_range_to_amdgpu_connector(struct drm_connector *conn)
 	return is_freesync_capable(range);
 }
 
+static void extend_range_from_vsdb(struct drm_display_info *display,
+				   const struct amdgpu_hdmi_vsdb_info *vsdb)
+{
+	u16 vrr_min = display->monitor_range.min_vfreq;
+	u16 vrr_max = display->monitor_range.max_vfreq;
+
+	/* Always extend upper limit */
+	if (vsdb->max_refresh_rate_hz > vrr_max)
+		vrr_max = vsdb->max_refresh_rate_hz;
+
+	/*
+	 * Only extend lower limit if current one disables LFC.
+
+	 * During widespread testing, we found that some manufacturers probably
+	 * had issues with their monitors' lower VRR boundaries and adjusted
+	 * them up (Gigabyte X34GS with official range 48 - 180, AMD vsdb 48 -
+	 * 180 yet Monitor Ranges 55 - 180). After setting the lower boundary
+	 * from AMD vsdb, such monitors start having blanking issues.
+	 *
+	 * Work around that by not touching VRR min if it still supports LFC.
+	 */
+	if (vsdb->min_refresh_rate_hz < vrr_min && (vrr_min * 2 >= vrr_max))
+		vrr_min = vsdb->min_refresh_rate_hz;
+
+	display->monitor_range.min_vfreq = vrr_min;
+	display->monitor_range.max_vfreq = vrr_max;
+}
+
 /**
  * amdgpu_dm_update_freesync_caps - Update Freesync capabilities
  *
@@ -13358,6 +13386,9 @@ void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
 		 */
 		if (is_monitor_range_invalid(connector))
 			monitor_range_from_vsdb(&connector->display_info, &vsdb_info);
+
+		/* Try extending range if found in AMD vsdb */
+		extend_range_from_vsdb(&connector->display_info, &vsdb_info);
 
 		if (dpcd_caps.allow_invalid_MSA_timing_param)
 			freesync_capable = copy_range_to_amdgpu_connector(connector);
