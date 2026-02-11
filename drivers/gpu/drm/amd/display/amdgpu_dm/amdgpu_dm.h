@@ -1020,6 +1020,7 @@ struct dm_connector_state {
 	uint8_t underscan_hborder;
 	bool underscan_enable;
 	bool freesync_capable;
+	bool freesync_on_desktop_capable;
 	bool update_hdcp;
 	bool abm_sysfs_forbidden;
 	uint8_t abm_level;
