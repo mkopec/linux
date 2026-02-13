@@ -8992,6 +8992,7 @@ void amdgpu_dm_connector_init_helper(struct amdgpu_display_manager *dm,
 	aconnector->audio_inst = -1;
 	aconnector->pack_sdp_v1_3 = false;
 	aconnector->as_type = ADAPTIVE_SYNC_TYPE_NONE;
+	aconnector->hdmi_allm_capable = false;
 	memset(&aconnector->vsdb_info, 0, sizeof(aconnector->vsdb_info));
 	mutex_init(&aconnector->hpd_lock);
 	mutex_init(&aconnector->handle_mst_msg_ready);
@@ -9188,6 +9189,10 @@ int amdgpu_dm_initialize_hdmi_connector(struct amdgpu_dm_connector *aconnector)
 	struct cec_connector_info conn_info;
 	struct drm_device *ddev = aconnector->base.dev;
 	struct device *hdmi_dev = ddev->dev;
+
+	/* ALLM */
+	drm_connector_attach_allm_capable_property(&aconnector->base);
+	drm_connector_attach_allm_mode_property(&aconnector->base);
 
 	if (amdgpu_dc_debug_mask & DC_DISABLE_HDMI_CEC) {
 		drm_info(ddev, "HDMI-CEC feature masked\n");
@@ -10879,6 +10884,31 @@ static int amdgpu_dm_atomic_setup_commit(struct drm_atomic_state *state)
 	return 0;
 }
 
+static void update_allm_state_on_crtc_stream(struct dm_crtc_state *new_crtc_state,
+					     const struct drm_connector_state *new_conn)
+{
+	struct mod_freesync_config *config = &new_crtc_state->freesync_config;
+	struct dc_stream_state *new_stream = new_crtc_state->stream;
+	bool allm_active = false;
+
+	switch (new_conn->allm_mode) {
+	case DRM_ALLM_MODE_ENABLED_DYNAMIC:
+		allm_active = config->state == VRR_STATE_ACTIVE_VARIABLE ||
+			      new_stream->content_type == DISPLAY_CONTENT_TYPE_GAME;
+		break;
+
+	case DRM_ALLM_MODE_ENABLED_FORCED:
+		allm_active = true;
+		break;
+
+	case DRM_ALLM_MODE_DISABLED:
+	default:
+		allm_active = false;
+	}
+
+	new_stream->hdmi_allm_active = allm_active;
+}
+
 /**
  * amdgpu_dm_atomic_commit_tail() - AMDgpu DM's commit tail implementation.
  * @state: The atomic state to commit
@@ -10921,12 +10951,14 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 	for_each_oldnew_connector_in_state(state, connector, old_con_state, new_con_state, i) {
 		struct dm_connector_state *dm_new_con_state = to_dm_connector_state(new_con_state);
 		struct dm_connector_state *dm_old_con_state = to_dm_connector_state(old_con_state);
+		struct amdgpu_dm_connector *dm_conn = to_amdgpu_dm_connector(connector);
 		struct amdgpu_crtc *acrtc = to_amdgpu_crtc(dm_new_con_state->base.crtc);
 		struct dc_surface_update *dummy_updates;
 		struct dc_stream_update stream_update;
 		struct dc_info_packet hdr_packet;
 		struct dc_stream_status *status = NULL;
 		bool abm_changed, hdr_changed, scaling_changed, output_color_space_changed = false;
+		bool allm_changed = false;
 
 		memset(&stream_update, 0, sizeof(stream_update));
 
@@ -10956,7 +10988,11 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 		hdr_changed =
 			!drm_connector_atomic_hdr_metadata_equal(old_con_state, new_con_state);
 
-		if (!scaling_changed && !abm_changed && !hdr_changed && !output_color_space_changed)
+		allm_changed = dm_conn->hdmi_allm_capable &&
+			       (new_con_state->allm_mode != old_con_state->allm_mode);
+
+		if (!scaling_changed && !abm_changed && !hdr_changed &&
+		    !output_color_space_changed && !allm_changed)
 			continue;
 
 		stream_update.stream = dm_new_crtc_state->stream;
@@ -10984,6 +11020,17 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 		if (hdr_changed) {
 			fill_hdr_info_packet(new_con_state, &hdr_packet);
 			stream_update.hdr_static_metadata = &hdr_packet;
+		}
+
+		if (allm_changed) {
+			update_allm_state_on_crtc_stream(dm_new_crtc_state, new_con_state);
+			mod_build_hf_vsif_infopacket(dm_new_crtc_state->stream,
+				&dm_new_crtc_state->stream->hfvsif_infopacket);
+
+			stream_update.hdmi_allm_active =
+				&dm_new_crtc_state->stream->hdmi_allm_active;
+			stream_update.hfvsif_infopacket =
+				&dm_new_crtc_state->stream->hfvsif_infopacket;
 		}
 
 		status = dc_stream_get_status(dm_new_crtc_state->stream);
@@ -13497,6 +13544,11 @@ update:
 
 	if (connector->passive_vrr_capable_property)
 		drm_connector_set_passive_vrr_capable_property(connector, freesync_on_desktop);
+
+	amdgpu_dm_connector->hdmi_allm_capable = connector->display_info.hdmi.allm;
+	if (connector->allm_capable_property)
+		drm_connector_set_allm_capable_property(
+			connector, connector->display_info.hdmi.allm);
 }
 
 void amdgpu_dm_trigger_timing_sync(struct drm_device *dev)

@@ -500,7 +500,7 @@ static bool is_hdmi_vic_mode(const struct dc_stream_state *stream)
 	if (stream->view_format != VIEW_3D_FORMAT_NONE)
 		return false;
 
-	if (stream->link->local_sink->edid_caps.allm)
+	if (stream->hdmi_allm_active)
 		return false;
 
 	return true;
@@ -529,7 +529,7 @@ void mod_build_hf_vsif_infopacket(const struct dc_stream_state *stream,
 
 		info_packet->valid = false;
 
-		allm = stream->link->local_sink->edid_caps.allm;
+		allm = stream->hdmi_allm_active;
 		format = stream->view_format == VIEW_3D_FORMAT_NONE ?
 			 TIMING_3D_FORMAT_NONE :
 			 stream->timing.timing_3d_format;
