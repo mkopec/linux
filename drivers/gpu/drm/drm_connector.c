@@ -2352,6 +2352,16 @@ EXPORT_SYMBOL(drm_mode_create_scaling_mode_property);
  *
  *	Absence of the property should indicate absence of support.
  *
+ * "passive_vrr_capable":
+ *	Optional &drm_connector boolean property that drivers should attach
+ *	with drm_connector_attach_passive_vrr_capable_property() on
+ *	connectors that could support keeping variable refresh rate signalling
+ *	in fixed-refresh rate scenarios like desktop work. Drivers should update
+ *	the property value by calling
+ *	drm_connector_set_passive_vrr_capable_property().
+ *
+ *	Absence of the property should indicate absence of support.
+ *
  * "VRR_ENABLED":
  *	Default &drm_crtc boolean property that notifies the driver that the
  *	content on the CRTC is suitable for variable refresh rate presentation.
@@ -2370,6 +2380,17 @@ EXPORT_SYMBOL(drm_mode_create_scaling_mode_property);
  *
  *	The driver may place further restrictions within these minimum
  *	and maximum bounds.
+ *
+ * "PASSIVE_VRR_DISABLED":
+ *	Default &drm_crtc boolean property that notifies the driver that the
+ *	VRR singalling should be disabled in fixed refresh rate scenarios.
+ *	Functionally, psssive vrr works the same as VRR_ENABLED == false
+ *	but works around displays blanking (mainly HDMI) that do not support
+ *	seamless VRR transitions. Also helps with brightness flickering during
+ *	VRR transitions.
+ *
+ *	Passive VRR mode is not that useful for DP/eDP sinks where seamless VRR
+ *	transitions are enforced by the standard.
  */
 
 /**
@@ -2402,6 +2423,37 @@ int drm_connector_attach_vrr_capable_property(
 	return 0;
 }
 EXPORT_SYMBOL(drm_connector_attach_vrr_capable_property);
+
+/**
+ * drm_connector_attach_passive_vrr_capable_property - creates the
+ * passive_vrr_capable property
+ * @connector: connector to create the passive_vrr_capable property on.
+ *
+ * This is used by atomic drivers to add support for querying
+ * variable refresh rate on desktop capability for a connector.
+ *
+ * Returns:
+ * Zero on success, negative errno on failure.
+ */
+int drm_connector_attach_passive_vrr_capable_property(
+	struct drm_connector *connector)
+{
+	struct drm_device *dev = connector->dev;
+	struct drm_property *prop;
+
+	if (!connector->passive_vrr_capable_property) {
+		prop = drm_property_create_bool(dev, DRM_MODE_PROP_IMMUTABLE,
+			"passive_vrr_capable");
+		if (!prop)
+			return -ENOMEM;
+
+		connector->passive_vrr_capable_property = prop;
+		drm_object_attach_property(&connector->base, prop, 0);
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_connector_attach_passive_vrr_capable_property);
 
 /**
  * drm_connector_attach_scaling_mode_property - attach atomic scaling mode property
@@ -2973,6 +3025,27 @@ void drm_connector_set_vrr_capable_property(
 				      capable);
 }
 EXPORT_SYMBOL(drm_connector_set_vrr_capable_property);
+
+/**
+ * drm_connector_set_passive_vrr_disabled_capable_property - sets the variable refresh
+ * rate on desktop capable property for a connector
+ * @connector: drm connector
+ * @capable: True if the connector is variable refresh rate on desktop capable
+ *
+ * Should be used by atomic drivers to update the indicated support for
+ * variable refresh rate on desktop over a connector.
+ */
+void drm_connector_set_passive_vrr_capable_property(
+		struct drm_connector *connector, bool capable)
+{
+	if (!connector->passive_vrr_capable_property)
+		return;
+
+	drm_object_property_set_value(&connector->base,
+				      connector->passive_vrr_capable_property,
+				      capable);
+}
+EXPORT_SYMBOL(drm_connector_set_passive_vrr_capable_property);
 
 /**
  * drm_connector_set_panel_orientation - sets the connector's panel_orientation
