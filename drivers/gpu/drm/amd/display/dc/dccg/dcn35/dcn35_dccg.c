@@ -2146,6 +2146,63 @@ static void dccg35_set_dpstreamclk_root_clock_gating_cb(
 		dccg35_disable_dpstreamclk_new(dccg, dp_hpo_inst);
 }
 
+static void dccg35_enable_hdmistreamclk(struct dccg *dccg, int otg_inst, int hdmi_hpo_inst)
+{
+	struct dcn_dccg *dccg_dcn = TO_DCN_DCCG(dccg);
+
+	/* enabled to select one of the DTBCLKs for pipe */
+	switch (hdmi_hpo_inst) {
+	case 0:
+		if (dccg->ctx->dc->debug.root_clock_optimization.bits.hdmistream) {
+			REG_UPDATE(DCCG_GATE_DISABLE_CNTL6,
+					HDMISTREAMCLK0_ROOT_GATE_DISABLE, 1);
+			REG_UPDATE(DCCG_GATE_DISABLE_CNTL3,
+					HDMISTREAMCLK0_GATE_DISABLE, 1);
+		}
+		REG_UPDATE_2(HDMISTREAMCLK_CNTL,
+				HDMISTREAMCLK0_SRC_SEL, otg_inst,
+				HDMISTREAMCLK0_EN, 1);
+		break;
+	default:
+		BREAK_TO_DEBUGGER();
+		return;
+	}
+}
+
+static void dccg35_disable_hdmistreamclk(struct dccg *dccg, int hdmi_hpo_inst)
+{
+	struct dcn_dccg *dccg_dcn = TO_DCN_DCCG(dccg);
+
+	switch (hdmi_hpo_inst) {
+	case 0:
+		REG_UPDATE(HDMISTREAMCLK_CNTL,
+				HDMISTREAMCLK0_EN, 0);
+		if (dccg->ctx->dc->debug.root_clock_optimization.bits.hdmistream) {
+			REG_UPDATE(DCCG_GATE_DISABLE_CNTL6,
+					HDMISTREAMCLK0_ROOT_GATE_DISABLE, 0);
+			REG_UPDATE(DCCG_GATE_DISABLE_CNTL3,
+					HDMISTREAMCLK0_GATE_DISABLE, 0);
+		}
+		break;
+	default:
+		BREAK_TO_DEBUGGER();
+		return;
+	}
+}
+
+static void dccg35_set_hdmistreamclk(
+		struct dccg *dccg,
+		enum streamclk_source src,
+		int otg_inst,
+		int hdmi_hpo_inst)
+{
+	/* enabled to select one of the DTBCLKs for pipe */
+	if (src == REFCLK)
+		dccg35_disable_hdmistreamclk(dccg, hdmi_hpo_inst);
+	else
+		dccg35_enable_hdmistreamclk(dccg, otg_inst, hdmi_hpo_inst);
+}
+
 static void dccg35_update_dpp_dto_cb(struct dccg *dccg, int dpp_inst,
 				  int req_dppclk)
 {
@@ -2389,6 +2446,7 @@ static const struct dccg_funcs dccg35_funcs_new = {
 	.get_dccg_ref_freq = dccg31_get_dccg_ref_freq,
 	.dccg_init = dccg35_init_cb,
 	.set_dpstreamclk = dccg35_set_dpstreamclk_cb,
+	.set_hdmistreamclk = dccg35_set_hdmistreamclk,
 	.set_dpstreamclk_root_clock_gating = dccg35_set_dpstreamclk_root_clock_gating_cb,
 	.enable_symclk32_se = dccg35_enable_symclk32_se_cb,
 	.disable_symclk32_se = dccg35_disable_symclk32_se_cb,
