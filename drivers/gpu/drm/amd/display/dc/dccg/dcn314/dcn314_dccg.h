@@ -208,4 +208,10 @@ void dccg314_set_dpstreamclk(
 		int otg_inst,
 		int dp_hpo_inst);
 
+void dccg314_set_hdmistreamclk(
+		struct dccg *dccg,
+		enum streamclk_source src,
+		int otg_inst,
+		int hdmi_hpo_inst);
+
 #endif //__DCN314_DCCG_H__

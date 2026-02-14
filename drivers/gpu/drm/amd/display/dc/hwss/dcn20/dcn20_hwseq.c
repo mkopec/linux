@@ -3019,6 +3019,7 @@ void dcn20_enable_stream(struct pipe_ctx *pipe_ctx)
 	struct dccg *dccg = dc->res_pool->dccg;
 	enum phyd32clk_clock_source phyd32clk;
 	int dp_hpo_inst;
+	int hdmi_hpo_inst = 0;
 
 	struct link_encoder *link_enc = pipe_ctx->link_res.dio_link_enc;
 	struct stream_encoder *stream_enc = pipe_ctx->stream_res.stream_enc;
@@ -3042,6 +3043,9 @@ void dcn20_enable_stream(struct pipe_ctx *pipe_ctx)
 		} else {
 			dccg->funcs->enable_symclk32_se(dccg, dp_hpo_inst, phyd32clk);
 		}
+	} else if (dc_is_hdmi_frl_signal(pipe_ctx->stream->signal)) {
+		hdmi_hpo_inst = pipe_ctx->stream_res.hpo_hdmi_stream_enc->inst;
+		dccg->funcs->set_hdmistreamclk(dccg, DTBCLK0, tg->inst, hdmi_hpo_inst);
 	} else {
 		if (dccg->funcs->enable_symclk_se && link_enc) {
 			if (link->ep_type == DISPLAY_ENDPOINT_USB4_DPIA
