@@ -165,10 +165,6 @@ struct dcn30_hpo_hdmi_stream_encoder_registers {
 	SE_SF(HDMI_STREAM_ENC_CLOCK_RAMP_ADJUSTER_FIFO_STATUS_CONTROL0,            \
 	      FIFO_PIXEL_ENCODING_TYPE, mask_sh),                                  \
 	SE_SF(HDMI_STREAM_ENC_CLOCK_RAMP_ADJUSTER_FIFO_STATUS_CONTROL0,            \
-	      FIFO_UNCOMPRESSED_PIXEL_FORMAT, mask_sh),                            \
-	SE_SF(HDMI_STREAM_ENC_CLOCK_RAMP_ADJUSTER_FIFO_STATUS_CONTROL0,            \
-	      FIFO_COMPRESSED_PIXEL_FORMAT, mask_sh),                              \
-	SE_SF(HDMI_STREAM_ENC_CLOCK_RAMP_ADJUSTER_FIFO_STATUS_CONTROL0,            \
 	      FIFO_RESET_DONE, mask_sh),                                           \
 	SE_SF(HDMI_STREAM_ENC_CLOCK_RAMP_ADJUSTER_FIFO_STATUS_CONTROL0,            \
 	      FIFO_VIDEO_STREAM_ACTIVE, mask_sh),                                  \
