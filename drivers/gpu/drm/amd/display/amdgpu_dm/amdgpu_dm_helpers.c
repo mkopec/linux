@@ -995,6 +995,8 @@ dm_helpers_read_acpi_edid(struct amdgpu_dm_connector *aconnector)
 
 void populate_hdmi_info_from_connector(struct drm_hdmi_info *hdmi, struct dc_edid_caps *edid_caps)
 {
+	struct dc_hdmi_dsc_caps *dsc = &edid_caps->dsc_caps;
+
 	edid_caps->scdc_present = hdmi->scdc.supported;
 
 	/* FRL */
@@ -1004,6 +1006,21 @@ void populate_hdmi_info_from_connector(struct drm_hdmi_info *hdmi, struct dc_edi
 	edid_caps->frl_caps.max_rate = hdmi->frl_cap.max_rate;
 	edid_caps->frl_caps.max_lanes = hdmi->frl_cap.max_lanes;
 	edid_caps->frl_caps.max_rate_per_lane = hdmi->frl_cap.max_rate_per_lane;
+
+	/* DSC */
+	if (hdmi->dsc_cap.v_1p2 != true)
+		return;
+
+	dsc->v1p2 = hdmi->dsc_cap.v_1p2;
+	dsc->all_bpp = hdmi->dsc_cap.all_bpp;
+	dsc->native_420 = hdmi->dsc_cap.native_420;
+	dsc->max_bpc = hdmi->dsc_cap.bpc_supported;
+	dsc->max_slices = hdmi->dsc_cap.max_slices;
+	dsc->total_chunk_kbytes = hdmi->dsc_cap.total_chunk_kbytes;
+
+	dsc->frl.max_rate = hdmi->dsc_cap.frl_cap.max_rate;
+	dsc->frl.max_lanes = hdmi->dsc_cap.frl_cap.max_lanes;
+	dsc->frl.max_rate_per_lane = hdmi->dsc_cap.frl_cap.max_rate_per_lane;
 }
 
 enum dc_edid_status dm_helpers_read_local_edid(
