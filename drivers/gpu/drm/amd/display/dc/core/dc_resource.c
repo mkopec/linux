@@ -3989,7 +3989,7 @@ static uint32_t hdmi_get_max_frl_bw_kbps(uint8_t frl_rate)
 	lane_count = (frl_rate <= 2) ? 3 : 4;
 	lane_rate_gbps = frl_lane_rate_gbps[frl_rate];
 
-	return lane_count * lane_rate_gbps * 1000000 / 8;
+	return lane_count * lane_rate_gbps * 1000000 * 16 / 18;
 }
 
 static bool hdmi_decide_link_settings(
@@ -4002,7 +4002,7 @@ static bool hdmi_decide_link_settings(
 			dc_link_get_highest_encoding_format(stream->link));
 
 	for (frl_rate = 1;
-		frl_rate < stream->link->local_sink->edid_caps.frl_caps.max_rate;
+		frl_rate <= stream->link->local_sink->edid_caps.frl_caps.max_rate;
 		++frl_rate)
 	{
 		rate_bw = hdmi_get_max_frl_bw_kbps(frl_rate);
@@ -4100,11 +4100,12 @@ enum dc_status resource_map_pool_resources(
 	}
 
 	if (dc_is_hdmi_frl_signal(stream->signal)) {
-		if (pipe_ctx->stream->link->local_sink->edid_caps.frl_caps.max_rate &&
-			hdmi_decide_link_settings(stream, pipe_ctx)) {
-			pipe_ctx->stream_res.hpo_hdmi_stream_enc = pool->hpo_hdmi_stream_enc[0];
-			pipe_ctx->link_res.hpo_hdmi_link_enc = pool->hpo_hdmi_link_enc[0];
-		}
+		if (!hdmi_decide_link_settings(stream, pipe_ctx))
+			return DC_FAIL_FRL_LINK_BANDWIDTH;
+
+		/* Only one pair of encoders on all HW so far. */
+		pipe_ctx->stream_res.hpo_hdmi_stream_enc = pool->hpo_hdmi_stream_enc[0];
+		pipe_ctx->link_res.hpo_hdmi_link_enc = pool->hpo_hdmi_link_enc[0];
 	}
 
 	if (dc->config.unify_link_enc_assignment && is_dio_encoder)
