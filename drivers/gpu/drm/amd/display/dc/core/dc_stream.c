@@ -53,7 +53,7 @@ void update_stream_signal(struct dc_stream_state *stream, struct dc_sink *sink)
 		stream->signal = sink->sink_signal;
 
 	if (dc_is_hdmi_tmds_signal(stream->signal))
-		if (stream->link_enc->features.flags.bits.IS_HDMI_FRL_CAPABLE &&
+		if (stream->link->link_enc->features.flags.bits.IS_HDMI_FRL_CAPABLE &&
 			sink->edid_caps.frl_caps.max_rate > 0)
 			stream->signal = SIGNAL_TYPE_HDMI_FRL;
 
