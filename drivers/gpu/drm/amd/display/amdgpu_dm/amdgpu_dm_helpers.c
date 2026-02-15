@@ -1000,7 +1000,7 @@ void populate_hdmi_info_from_connector(struct drm_hdmi_info *hdmi, struct dc_edi
 	edid_caps->scdc_present = hdmi->scdc.supported;
 
 	/* FRL */
-	if (edid_caps->frl_caps.max_rate == 0)
+	if (hdmi->frl_cap.max_rate == 0)
 		return;
 
 	edid_caps->frl_caps.max_rate = hdmi->frl_cap.max_rate;
