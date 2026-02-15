@@ -27,7 +27,7 @@ static void enable_hpo_hdmi_frl_link_output(
 
 	enc = link_res->hpo_hdmi_link_enc;
 	frl_rate = link_settings->frl_rate;
-	lane_count = (frl_rate <= 3) ? 3 : 4;
+	lane_count = (frl_rate <= 2) ? 3 : 4;
 
 	enc->funcs->configure_transmitter(enc, link, frl_rate,
 					  link->link_enc->transmitter,

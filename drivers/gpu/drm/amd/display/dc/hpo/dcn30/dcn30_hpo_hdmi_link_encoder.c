@@ -110,7 +110,7 @@ static void dcn30_hpo_hdmi_link_enc_configure_transmitter(
 	cntl.engine_id = enc3->base.preferred_engine;
 	cntl.transmitter = enc3->base.transmitter;
 	cntl.signal = SIGNAL_TYPE_HDMI_FRL;
-	cntl.lanes_number = (frl_rate <= 3) ? 3 : 4;
+	cntl.lanes_number = (frl_rate <= 2) ? 3 : 4;
 	cntl.hpd_sel = enc3->base.hpd_source;
 	cntl.pixel_clock = hdmi_frl_rate_to_pixel_clock(frl_rate);
 	cntl.color_depth = COLOR_DEPTH_UNDEFINED;
