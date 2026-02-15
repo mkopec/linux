@@ -6108,38 +6108,44 @@ static void drm_parse_vcdb(struct drm_connector *connector, const u8 *db)
 }
 
 static
-void drm_get_max_frl_rate(int max_frl_rate, u8 *max_lanes, u8 *max_rate_per_lane)
+void drm_parse_max_frl_rate(int max_frl_rate, struct drm_hdmi_frl_cap *frl)
 {
+	u8 max_lanes, max_rate_per_lane;
+
 	switch (max_frl_rate) {
 	case 1:
-		*max_lanes = 3;
-		*max_rate_per_lane = 3;
+		max_lanes = 3;
+		max_rate_per_lane = 3;
 		break;
 	case 2:
-		*max_lanes = 3;
-		*max_rate_per_lane = 6;
+		max_lanes = 3;
+		max_rate_per_lane = 6;
 		break;
 	case 3:
-		*max_lanes = 4;
-		*max_rate_per_lane = 6;
+		max_lanes = 4;
+		max_rate_per_lane = 6;
 		break;
 	case 4:
-		*max_lanes = 4;
-		*max_rate_per_lane = 8;
+		max_lanes = 4;
+		max_rate_per_lane = 8;
 		break;
 	case 5:
-		*max_lanes = 4;
-		*max_rate_per_lane = 10;
+		max_lanes = 4;
+		max_rate_per_lane = 10;
 		break;
 	case 6:
-		*max_lanes = 4;
-		*max_rate_per_lane = 12;
+		max_lanes = 4;
+		max_rate_per_lane = 12;
 		break;
 	case 0:
 	default:
-		*max_lanes = 0;
-		*max_rate_per_lane = 0;
+		max_lanes = 0;
+		max_rate_per_lane = 0;
 	}
+
+	frl->max_lanes = max_lanes;
+	frl->max_rate = max_frl_rate;
+	frl->max_rate_per_lane = max_rate_per_lane;
 }
 
 static void drm_parse_ycbcr420_deep_color_info(struct drm_connector *connector,
@@ -6178,8 +6184,7 @@ static void drm_parse_dsc_info(struct drm_hdmi_dsc_cap *hdmi_dsc,
 		u8 dsc_max_frl_rate;
 
 		dsc_max_frl_rate = (hf_scds[12] & DRM_EDID_DSC_MAX_FRL_RATE_MASK) >> 4;
-		drm_get_max_frl_rate(dsc_max_frl_rate, &hdmi_dsc->max_lanes,
-				     &hdmi_dsc->max_frl_rate_per_lane);
+		drm_parse_max_frl_rate(dsc_max_frl_rate, &hdmi_dsc->frl_cap);
 
 		dsc_max_slices = hf_scds[12] & DRM_EDID_DSC_MAX_SLICES;
 
@@ -6272,8 +6277,7 @@ static void drm_parse_hdmi_forum_scds(struct drm_connector *connector,
 
 	if (hf_scds[7]) {
 		max_frl_rate = (hf_scds[7] & DRM_EDID_MAX_FRL_RATE_MASK) >> 4;
-		drm_get_max_frl_rate(max_frl_rate, &hdmi->max_lanes,
-				     &hdmi->max_frl_rate_per_lane);
+		drm_parse_max_frl_rate(max_frl_rate, &hdmi->frl_cap);
 	}
 
 	drm_parse_ycbcr420_deep_color_info(connector, hf_scds);

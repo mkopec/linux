@@ -255,6 +255,24 @@ struct drm_scdc {
 };
 
 /**
+ * struct drm_hdmi_frl_cap - FRL capabilities of HDMI sink
+ *
+ * Describes the FRL support provided by HDMI 2.1 sink.
+ * The information is fetched fom additional HFVSDB blocks defined
+ * for HDMI 2.1.
+ */
+struct drm_hdmi_frl_cap {
+	/** @max_rate: raw max rate value without parsing */
+	u8 max_rate;
+
+	/** @max_frl_rate_per_lane: support fixed rate link */
+	u8 max_rate_per_lane;
+
+	/** @max_lanes: supported by sink */
+	u8 max_lanes;
+};
+
+/**
  * struct drm_hdmi_dsc_cap - DSC capabilities of HDMI sink
  *
  * Describes the DSC support provided by HDMI 2.1 sink.
@@ -285,14 +303,11 @@ struct drm_hdmi_dsc_cap {
 	/** @clk_per_slice : max pixel clock in MHz supported per slice */
 	int clk_per_slice;
 
-	/** @max_lanes : dsc max lanes supported for Fixed rate Link training */
-	u8 max_lanes;
-
-	/** @max_frl_rate_per_lane : maximum frl rate with DSC per lane */
-	u8 max_frl_rate_per_lane;
-
 	/** @total_chunk_kbytes: max size of chunks in KBs supported per line*/
 	u8 total_chunk_kbytes;
+
+	/** @frl_cap: FRL under DSC capabilities of the sink */
+	struct drm_hdmi_frl_cap frl_cap;
 };
 
 /**
@@ -324,11 +339,8 @@ struct drm_hdmi_info {
 	/** @y420_dc_modes: bitmap of deep color support index */
 	u8 y420_dc_modes;
 
-	/** @max_frl_rate_per_lane: support fixed rate link */
-	u8 max_frl_rate_per_lane;
-
-	/** @max_lanes: supported by sink */
-	u8 max_lanes;
+	/** @frl_cap: FRL capabilities of the sink */
+	struct drm_hdmi_frl_cap frl_cap;
 
 	/** @dsc_cap: DSC capabilities of the sink */
 	struct drm_hdmi_dsc_cap dsc_cap;
