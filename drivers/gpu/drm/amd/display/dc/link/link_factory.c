@@ -604,7 +604,7 @@ static bool construct_phy(struct dc_link *link,
 
 	switch (link->link_id.id) {
 	case CONNECTOR_ID_HDMI_TYPE_A:
-		link->connector_signal = SIGNAL_TYPE_HDMI_FRL;
+		link->connector_signal = SIGNAL_TYPE_HDMI_TYPE_A;
 
 		if (link->link_enc->hpd_gpio)
 			link->irq_source_read_request =
