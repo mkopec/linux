@@ -5202,7 +5202,6 @@ enum dc_status dc_validate_stream(struct dc *dc, struct dc_stream_state *stream)
 
 	if (res == DC_OK) {
 		if (link->ep_type == DISPLAY_ENDPOINT_PHY &&
-				!dc_is_hdmi_frl_signal(stream->signal) && /* FIXME: Temporary w/a for link encoder bringup */
 				!link->link_enc->funcs->validate_output_with_stream(
 						link->link_enc, stream))
 			res = DC_FAIL_ENC_VALIDATE;

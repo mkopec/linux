@@ -623,6 +623,10 @@ static bool dcn10_link_encoder_validate_hdmi_output(
 	enum dc_color_depth max_deep_color =
 			enc10->base.features.max_hdmi_deep_color;
 
+	// FRL is always fine. TODO add validation
+	if (edid_caps->frl_caps.max_rate > 0)
+		return true;
+
 	// check pixel clock against edid specified max TMDS clk
 	if (edid_caps->max_tmds_clk_mhz != 0 &&
 			adjusted_pix_clk_100hz > edid_caps->max_tmds_clk_mhz * 10000)
@@ -804,6 +808,7 @@ bool dcn10_link_encoder_validate_output_with_stream(
 			&stream->timing);
 	break;
 	case SIGNAL_TYPE_HDMI_TYPE_A:
+	case SIGNAL_TYPE_HDMI_FRL:
 		is_valid = dcn10_link_encoder_validate_hdmi_output(
 				enc10,
 				&stream->timing,
