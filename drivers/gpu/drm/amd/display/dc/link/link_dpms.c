@@ -1924,24 +1924,15 @@ static enum dc_status enable_link_hdmi(struct pipe_ctx *pipe_ctx)
 
 	DC_LOG_HW_LINK_TRAINING("enable_link_hdmi entered\n");
 
-	if (dc_is_hdmi_frl_signal(stream->signal)) {
-		link->cur_link_settings.frl_rate =
-			link->local_sink->edid_caps.frl_caps.max_rate;
-		link->cur_link_settings.lane_count =
-			link->local_sink->edid_caps.frl_caps.max_lanes;
-
-		DC_LOG_HW_LINK_TRAINING(
-			"FORCING FRL: rate=%d lanes=%d\n",
-			link->cur_link_settings.frl_rate,
-			link->cur_link_settings.lane_count);
-	}
-
 	const struct link_hwss *link_hwss = get_link_hwss(link, &pipe_ctx->link_res);
 
 	if (dc_is_hdmi_frl_signal(pipe_ctx->stream->signal) &&
 		link_hwss->ext.enable_hdmi_link_output) {
 
-		DC_LOG_HW_LINK_TRAINING("HDMI FRL detected, using HPO path\n");
+		link->cur_link_settings.frl_rate =
+			pipe_ctx->link_config.dp_link_settings.frl_rate;
+		link->cur_link_settings.lane_count =
+			pipe_ctx->link_config.dp_link_settings.lane_count;
 
 		link_hwss->ext.enable_hdmi_link_output(
 			link,
