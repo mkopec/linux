@@ -996,6 +996,14 @@ dm_helpers_read_acpi_edid(struct amdgpu_dm_connector *aconnector)
 void populate_hdmi_info_from_connector(struct drm_hdmi_info *hdmi, struct dc_edid_caps *edid_caps)
 {
 	edid_caps->scdc_present = hdmi->scdc.supported;
+
+	/* FRL */
+	if (edid_caps->frl_caps.max_rate == 0)
+		return;
+
+	edid_caps->frl_caps.max_rate = hdmi->frl_cap.max_rate;
+	edid_caps->frl_caps.max_lanes = hdmi->frl_cap.max_lanes;
+	edid_caps->frl_caps.max_rate_per_lane = hdmi->frl_cap.max_rate_per_lane;
 }
 
 enum dc_edid_status dm_helpers_read_local_edid(
