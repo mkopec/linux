@@ -3962,13 +3962,13 @@ static int intel_dp_hdmi_sink_max_frl(struct intel_dp *intel_dp)
 	int max_lanes, rate_per_lane;
 	int max_dsc_lanes, dsc_rate_per_lane;
 
-	max_lanes = info->hdmi.max_lanes;
-	rate_per_lane = info->hdmi.max_frl_rate_per_lane;
+	max_lanes = info->hdmi.frl_cap.max_lanes;
+	rate_per_lane = info->hdmi.frl_cap.max_rate_per_lane;
 	max_frl_rate = max_lanes * rate_per_lane;
 
 	if (info->hdmi.dsc_cap.v_1p2) {
-		max_dsc_lanes = info->hdmi.dsc_cap.max_lanes;
-		dsc_rate_per_lane = info->hdmi.dsc_cap.max_frl_rate_per_lane;
+		max_dsc_lanes = info->hdmi.dsc_cap.frl_cap.max_lanes;
+		dsc_rate_per_lane = info->hdmi.dsc_cap.frl_cap.max_rate_per_lane;
 		if (max_dsc_lanes && dsc_rate_per_lane)
 			max_frl_rate = min(max_frl_rate, max_dsc_lanes * dsc_rate_per_lane);
 	}
