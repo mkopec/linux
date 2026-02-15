@@ -329,7 +329,7 @@ static bool dp_validate_mode_timing(
 		return false;
 }
 
-uint32_t hdmi_get_max_frl_bw_kbps(uint8_t frl_rate)
+static uint32_t hdmi_get_max_frl_bw_kbps(uint8_t frl_rate)
 {
 	static const uint8_t frl_lane_rate_gbps[] = {
 		[1] = 3, [2] = 6, [3] = 6, [4] = 8, [5] = 10, [6] = 12,

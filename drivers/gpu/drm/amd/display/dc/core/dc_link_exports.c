@@ -345,6 +345,10 @@ enum dc_link_encoding_format dc_link_get_highest_encoding_format(const struct dc
 				DP_128b_132b_ENCODING)
 			return DC_LINK_ENCODING_DP_128b_132b;
 	} else if (dc_is_hdmi_signal(link->connector_signal)) {
+		if (link->local_sink->edid_caps.frl_caps.max_rate > 0)
+			return DC_LINK_ENCODING_HDMI_FRL;
+		else
+			return DC_LINK_ENCODING_HDMI_TMDS;
 	}
 
 	return DC_LINK_ENCODING_UNSPECIFIED;
