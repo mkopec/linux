@@ -1921,13 +1921,14 @@ static enum dc_status enable_link_hdmi(struct pipe_ctx *pipe_ctx)
 	bool is_vga_mode = (stream->timing.h_addressable == 640)
 			&& (stream->timing.v_addressable == 480);
 	struct dc *dc = pipe_ctx->stream->ctx->dc;
-	uint8_t frl_rate, lane_count;
 
 	DC_LOG_HW_LINK_TRAINING("enable_link_hdmi entered\n");
 
 	if (dc_is_hdmi_frl_signal(stream->signal)) {
-		link->cur_link_settings.frl_rate = 6;
-		link->cur_link_settings.lane_count = 4;
+		link->cur_link_settings.frl_rate =
+			link->local_sink->edid_caps.frl_caps.max_rate;
+		link->cur_link_settings.lane_count =
+			link->local_sink->edid_caps.frl_caps.max_lanes;
 
 		DC_LOG_HW_LINK_TRAINING(
 			"FORCING FRL: rate=%d lanes=%d\n",
@@ -1948,14 +1949,7 @@ static enum dc_status enable_link_hdmi(struct pipe_ctx *pipe_ctx)
 			pipe_ctx->stream->signal,
 			&link->cur_link_settings);
 
-		frl_rate = link->cur_link_settings.frl_rate;
-		lane_count = (frl_rate <= 3) ? 3 : 4;
-
-		if (!dc_link_perform_frl_training(
-				link,
-				&pipe_ctx->link_res,
-				frl_rate,
-				lane_count)) {
+		if (!dc_link_perform_frl_training(link, &pipe_ctx->link_res)) {
 			DC_LOG_HW_LINK_TRAINING("HDMI FRL: training failed\n");
 			return DC_ERROR_UNEXPECTED;
 		}

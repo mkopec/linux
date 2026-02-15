@@ -32,7 +32,6 @@ struct link_resource;
  *   false - training failed, link is disabled
  */
 bool dc_link_perform_frl_training(struct dc_link *link,
-				  const struct link_resource *link_res,
-				  uint8_t frl_rate, uint8_t lane_count);
+				  const struct link_resource *link_res);
 
 #endif /* __LINK_HDMI_FRL_TRAINING_H__ */

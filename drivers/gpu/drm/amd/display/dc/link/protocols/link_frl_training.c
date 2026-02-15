@@ -52,10 +52,11 @@ static bool frl_write_scdc(struct dc_link *link, uint8_t offset,
 }
 
 bool dc_link_perform_frl_training(struct dc_link *link,
-				  const struct link_resource *link_res,
-				  uint8_t frl_rate, uint8_t lane_count)
+				  const struct link_resource *link_res)
 {
 	struct hpo_hdmi_link_encoder *enc = link_res->hpo_hdmi_link_enc;
+	uint8_t lane_count = link->cur_link_settings.lane_count;
+	uint8_t frl_rate = link->cur_link_settings.frl_rate;
 	uint8_t sink_version;
 	uint8_t update;
 	uint8_t status;
