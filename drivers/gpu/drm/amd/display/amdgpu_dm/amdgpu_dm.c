@@ -6799,12 +6799,22 @@ static void fill_stream_properties_from_drm_display_mode(
 
 	stream->out_transfer_func.type = TF_TYPE_PREDEFINED;
 	stream->out_transfer_func.tf = TRANSFER_FUNCTION_SRGB;
+
+	/* If pixel clock exceeds max HDMI TMDS clock, do one of two things:
+	 * - If FRL is supported, upgrade the signal type to FRL
+	 * - Else, try to fall back to 4:2:0 encoding for TMDS
+	 */
 	if (stream->signal == SIGNAL_TYPE_HDMI_TYPE_A) {
 		if (!adjust_colour_depth_from_display_info(timing_out, info) &&
 		    drm_mode_is_420_also(info, mode_in) &&
 		    timing_out->pixel_encoding != PIXEL_ENCODING_YCBCR420) {
-			timing_out->pixel_encoding = PIXEL_ENCODING_YCBCR420;
-			adjust_colour_depth_from_display_info(timing_out, info);
+			if (stream->link->link_enc->features.flags.bits.IS_HDMI_FRL_CAPABLE &&
+				stream->sink->edid_caps.frl_caps.max_rate > 0) {
+				stream->signal = SIGNAL_TYPE_HDMI_FRL;
+			} else {
+				timing_out->pixel_encoding = PIXEL_ENCODING_YCBCR420;
+				adjust_colour_depth_from_display_info(timing_out, info);
+			}
 		}
 	}
 
@@ -7401,7 +7411,9 @@ create_stream_for_sink(struct drm_connector *connector,
 		connector,
 		sink);
 
-	update_stream_signal(stream, sink);
+	/* Don't touch if already upgraded to FRL */
+	if (stream->signal != SIGNAL_TYPE_HDMI_FRL)
+		update_stream_signal(stream, sink);
 
 	if (dc_is_hdmi_signal(stream->signal))
 		mod_build_hf_vsif_infopacket(stream, &stream->vsp_infopacket);
