@@ -1184,9 +1184,15 @@ void dce110_disable_stream(struct pipe_ctx *pipe_ctx)
 			}
 		}
 	} else if (dc_is_hdmi_frl_signal(pipe_ctx->stream->signal) && dccg) {
+		dto_params.otg_inst = tg->inst;
+		dto_params.timing = &pipe_ctx->stream->timing;
 		hdmi_hpo_inst = pipe_ctx->stream_res.hpo_hdmi_stream_enc->inst;
 		if (dccg) {
 			dccg->funcs->set_hdmistreamclk(dccg, REFCLK, tg->inst, hdmi_hpo_inst);
+			if (!(dc->ctx->dce_version >= DCN_VERSION_3_5)) {
+				if (dccg && dccg->funcs->set_dtbclk_dto)
+					dccg->funcs->set_dtbclk_dto(dccg, &dto_params);
+			}
 		}
 	} else if (dccg && dccg->funcs->disable_symclk_se) {
 		dccg->funcs->disable_symclk_se(dccg, stream_enc->stream_enc_inst,
