@@ -374,9 +374,6 @@ static enum bp_result transmitter_control_v1_7(
 			DC_LOG_BIOS("%s:dig_v1_7.symclk_units.symclk_10khz = %d\n",
 			__func__, dig_v1_7.symclk_units.symclk_10khz);
 	}
-	DC_LOG_ERROR("phyid %d action %d laneset 0x%x lanenum %d hpdsel %d digfe_sel %d connobj_id %d HPO_instance %d symclk_10khz %d\n",
-		dig_v1_7.phyid,  dig_v1_7.action,  dig_v1_7.mode_laneset,  dig_v1_7.lanenum,
-		dig_v1_7.hpdsel,  dig_v1_7.digfe_sel,  dig_v1_7.connobj_id,  dig_v1_7.HPO_instance,  dig_v1_7.symclk_units.symclk_10khz);
 
 	if (bp->base.ctx->dc->ctx->dmub_srv &&
 		bp->base.ctx->dc->debug.dmub_command_table) {
