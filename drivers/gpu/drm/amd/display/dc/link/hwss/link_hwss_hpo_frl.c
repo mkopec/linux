@@ -51,7 +51,7 @@ disable_hpo_hdmi_frl_link_output(struct dc_link *link,
 	enc->funcs->link_disable(enc);
 }
 
-void setup_hpo_hdmi_frl_stream_encoder(struct pipe_ctx *pipe_ctx)
+static void setup_hpo_hdmi_frl_stream_encoder(struct pipe_ctx *pipe_ctx)
 {
 	struct hpo_hdmi_stream_encoder *stream_enc =
 		pipe_ctx->stream_res.hpo_hdmi_stream_enc;
@@ -60,7 +60,7 @@ void setup_hpo_hdmi_frl_stream_encoder(struct pipe_ctx *pipe_ctx)
 	stream_enc->funcs->enable(stream_enc, otg_inst);
 }
 
-void reset_hpo_hdmi_frl_stream_encoder(struct pipe_ctx *pipe_ctx)
+static void reset_hpo_hdmi_frl_stream_encoder(struct pipe_ctx *pipe_ctx)
 {
 	struct hpo_hdmi_stream_encoder *stream_enc =
 		pipe_ctx->stream_res.hpo_hdmi_stream_enc;
@@ -72,7 +72,7 @@ void reset_hpo_hdmi_frl_stream_encoder(struct pipe_ctx *pipe_ctx)
 	stream_enc->funcs->disable(stream_enc);
 }
 
-void setup_hpo_hdmi_frl_stream_attribute(struct pipe_ctx *pipe_ctx)
+static void setup_hpo_hdmi_frl_stream_attribute(struct pipe_ctx *pipe_ctx)
 {
 	struct hpo_hdmi_stream_encoder *stream_enc =
 		pipe_ctx->stream_res.hpo_hdmi_stream_enc;
@@ -87,7 +87,7 @@ void setup_hpo_hdmi_frl_stream_attribute(struct pipe_ctx *pipe_ctx)
 						  output_color_space);
 }
 
-void setup_hpo_hdmi_frl_audio_output(struct pipe_ctx *pipe_ctx,
+static void setup_hpo_hdmi_frl_audio_output(struct pipe_ctx *pipe_ctx,
 				     struct audio_output *audio_output,
 				     uint32_t audio_inst)
 {
@@ -96,13 +96,13 @@ void setup_hpo_hdmi_frl_audio_output(struct pipe_ctx *pipe_ctx,
 		&pipe_ctx->stream->audio_info, &audio_output->crtc_info);
 }
 
-void enable_hpo_hdmi_frl_audio_packet(struct pipe_ctx *pipe_ctx)
+static void enable_hpo_hdmi_frl_audio_packet(struct pipe_ctx *pipe_ctx)
 {
 	pipe_ctx->stream_res.hpo_hdmi_stream_enc->funcs->hdmi_audio_enable(
 		pipe_ctx->stream_res.hpo_hdmi_stream_enc);
 }
 
-void disable_hpo_hdmi_frl_audio_packet(struct pipe_ctx *pipe_ctx)
+static void disable_hpo_hdmi_frl_audio_packet(struct pipe_ctx *pipe_ctx)
 {
 	if (pipe_ctx->stream_res.audio)
 		pipe_ctx->stream_res.hpo_hdmi_stream_enc->funcs

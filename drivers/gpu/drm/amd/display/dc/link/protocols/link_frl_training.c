@@ -60,7 +60,6 @@ bool dc_link_perform_frl_training(struct dc_link *link,
 	uint8_t sink_version;
 	uint8_t update;
 	uint8_t status;
-	uint8_t flags;
 	uint16_t ltp_req;
 	uint8_t write_buffer[2];
 	int poll;
