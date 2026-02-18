@@ -3974,48 +3974,313 @@ static bool acquire_otg_master_pipe_for_stream(
 	return pipe_idx != FREE_PIPE_INDEX_NOT_FOUND;
 }
 
-static uint32_t hdmi_get_max_frl_bw_kbps(uint8_t frl_rate)
+/* DFM calc
+ * References:
+ * https://github.com/openharmony/device_soc_hisilicon/blob/master/hi3516dv300/sdk_linux/drv/mpp/component/hdmi/src/mkp/drv_hdmi_dfm.c#L264
+ * https://github.com/jelyoussefi/intel-gpu-i915/blob/e366083d562341ce15d5fe1a39bb6e07f18a4745/drivers/gpu/drm/i915/display/intel_hdmi.c#L4217
+ * TODO Move to separate file in protocols */
+
+#define DFM_TOLERANCE_PIXEL_CLOCK_PCT_X1000 5   /* +0.50% -> 5/1000 */
+#define DFM_TOLERANCE_AUDIO_CLOCK_PPM     1000 /* +/- 1000 ppm */
+#define DFM_TOLERANCE_FRL_BIT_RATE_PPM    300  /* +/- 300 ppm */
+#define DFM_TB_BORROWED_MAX               400
+#define DFM_FRL_CFRL_CB                   510
+
+struct dfm_config {
+    /* Video Timing */
+    uint32_t pixel_clock_khz; /* Nominal */
+    uint32_t hactive;
+    uint32_t hblank;
+    uint32_t bpc;             /* Bits per component */
+    enum dc_pixel_encoding encoding;
+
+    /* FRL Configuration */
+    uint32_t frl_bit_rate_gbps; /* 3, 6, 8, 10, 12 */
+    uint8_t lanes;              /* 3 or 4 */
+
+    /* Audio */
+    bool audio_enable;
+    uint32_t audio_freq_hz;
+    uint8_t audio_channels;
+};
+
+struct dfm_results {
+    /* Calculated Parameters */
+    uint64_t f_pixel_clock_max;
+    uint64_t r_frl_char_min;
+    uint32_t overhead_ppm;
+
+    /* Audio */
+    uint32_t audio_packets_line;
+    uint32_t hblank_audio_min;
+
+    /* Tri-Bytes */
+    uint32_t tb_active;
+    uint32_t tb_blank;
+
+    /* Compression */
+    uint32_t cfrl_rc_savings;
+
+    /* Timing (ns) */
+    uint64_t t_active_min;
+    uint64_t t_active_ref;
+    uint64_t t_blank_min;
+    uint64_t t_blank_ref;
+
+    /* Borrowing */
+    uint64_t tb_borrowed;
+
+    /* Utilization */
+    uint32_t cfrl_line;
+    uint32_t cfrl_actual_payload;
+    int32_t  margin_ppm; /* Can be negative */
+
+    /* Pass/Fail Flags */
+    bool audio_supported;
+    bool dfm_supported;
+    bool utilization_supported;
+    bool total_supported;
+};
+
+
+#define CEILING(x, y) (((x) + (y) - 1) / (y))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
+static uint32_t calc_overhead_ppm(uint8_t lanes)
 {
-	static const uint8_t frl_lane_rate_gbps[] = {
-		[1] = 3, [2] = 6, [3] = 6, [4] = 8, [5] = 10, [6] = 12,
-	};
+    uint32_t cfrl_sb = (4 * 510) + lanes;
 
-	uint32_t lane_rate_gbps;
-	uint32_t lane_count;
+    uint64_t oh_sb_num = (uint64_t)lanes * 1000000ULL;
+    uint32_t oh_sb = (uint32_t)((oh_sb_num + (cfrl_sb/2)) / cfrl_sb); /* Rounding */
 
-	if (frl_rate < 1 || frl_rate > 6)
-		return 0;
+    uint64_t oh_rs_num = 32ULL * 1000000ULL;
+    uint32_t oh_rs = (uint32_t)((oh_rs_num + (cfrl_sb/2)) / cfrl_sb);
 
-	lane_count = (frl_rate <= 2) ? 3 : 4;
-	lane_rate_gbps = frl_lane_rate_gbps[frl_rate];
+    uint64_t oh_map_num = 2500000ULL; /* 2.5 * 1M */
+    uint32_t oh_map = (uint32_t)((oh_map_num + (cfrl_sb/2)) / cfrl_sb);
 
-	return lane_count * lane_rate_gbps * 1000000 * 16 / 18;
+    uint32_t oh_m = 3000;
+
+    return oh_sb + oh_rs + oh_map + oh_m;
+}
+
+static void calc_audio(const struct dfm_config *cfg,
+                       uint64_t t_line_ns,
+                       struct dfm_results *res)
+{
+    if (!cfg->audio_enable) {
+        res->audio_packets_line = 0;
+        res->hblank_audio_min = 64;
+        return;
+    }
+
+    uint32_t ap = 1;
+    if (cfg->audio_channels > 22) {
+        ap = 4; /* ACAT 3 (up to 30.2ch) */
+    } else if (cfg->audio_channels > 10) {
+        ap = 3; /* ACAT 2 (up to 22.2ch) */
+    } else if (cfg->audio_channels > 8) {
+        ap = 2; /* ACAT 1 (up to 10.2ch) */
+    } else {
+        ap = 1; /* Layout 0/1 */
+    }
+
+    uint64_t rap = (uint64_t)cfg->audio_freq_hz * (1000000 + DFM_TOLERANCE_AUDIO_CLOCK_PPM);
+    rap = (rap * ap) / 1000000;
+
+    uint64_t avg_pkts_x1000 = (rap * t_line_ns) / 1000000; /* ns to ms scale */
+
+    res->audio_packets_line = (uint32_t)((avg_pkts_x1000 + 999) / 1000);
+
+    res->hblank_audio_min = 64 + (32 * res->audio_packets_line);
+}
+
+/* Table 6-44: RC Compression Savings */
+static void calc_rc_compression(const struct dfm_config *cfg, struct dfm_results *res)
+{
+    uint32_t k420 = (cfg->encoding == PIXEL_ENCODING_YCBCR420) ? 2 : 1;
+    uint32_t kcd = (cfg->encoding == PIXEL_ENCODING_YCBCR422) ? 1 : cfg->bpc;
+
+    uint64_t raw_num = (uint64_t)cfg->hblank * kcd * 8;
+    uint64_t raw_den = (uint64_t)k420 * 7;
+    uint32_t raw_capacity = (uint32_t)(raw_num / raw_den); /* FLOOR */
+
+    uint32_t deduct = 32 * (1 + res->audio_packets_line) + 7;
+    int32_t free_chars = (int32_t)raw_capacity - (int32_t)deduct;
+
+    if (free_chars < 0) free_chars = 0;
+
+    int32_t margin = 4;
+
+    int32_t base = free_chars - margin;
+    if (base < 0) base = 0;
+
+    res->cfrl_rc_savings = (uint32_t)((base * 7) / 8);
+}
+
+/* Core DFM Check Function */
+static void perform_dfm_check(const struct dfm_config *cfg, struct dfm_results *res)
+{
+    memset(res, 0, sizeof(struct dfm_results));
+
+    uint32_t htotal = cfg->hactive + cfg->hblank;
+
+    res->overhead_ppm = calc_overhead_ppm(cfg->lanes);
+
+    res->f_pixel_clock_max = (uint64_t)cfg->pixel_clock_khz * 1000;
+    res->f_pixel_clock_max = res->f_pixel_clock_max * (1000 + DFM_TOLERANCE_PIXEL_CLOCK_PCT_X1000) / 1000;
+
+    uint64_t t_line_ns = ((uint64_t)htotal * 1000000000ULL) / res->f_pixel_clock_max;
+
+    uint64_t r_bit_nominal = (uint64_t)cfg->frl_bit_rate_gbps * 1000000000ULL;
+    uint64_t r_bit_min = r_bit_nominal * (1000000 - DFM_TOLERANCE_FRL_BIT_RATE_PPM) / 1000000;
+
+    res->r_frl_char_min = r_bit_min / 18;
+
+    uint64_t cap_calc = (t_line_ns * res->r_frl_char_min * cfg->lanes) / 1000000000ULL;
+    res->cfrl_line = (uint32_t)cap_calc;
+
+    calc_audio(cfg, t_line_ns, res);
+
+    calc_rc_compression(cfg, res);
+
+    uint32_t bpp;
+    uint32_t k420 = (cfg->encoding == PIXEL_ENCODING_YCBCR420) ? 2 : 1;
+    uint32_t kcd = (cfg->encoding == PIXEL_ENCODING_YCBCR422) ? 1 : cfg->bpc;
+
+    bpp = (24 * kcd) / (k420 * 8);
+
+    uint64_t bytes_line = ((uint64_t)bpp * cfg->hactive) / 8;
+
+    res->tb_active = (uint32_t)CEILING(bytes_line, 3);
+
+    uint64_t tb_blank_num = (uint64_t)cfg->hblank * kcd;
+    uint64_t tb_blank_den = (uint64_t)k420 * 8;
+    res->tb_blank = (uint32_t)CEILING(tb_blank_num, tb_blank_den);
+
+    if (res->hblank_audio_min <= res->tb_blank) {
+        res->audio_supported = true;
+    } else {
+        res->audio_supported = false;
+        res->total_supported = false;
+        return;
+    }
+
+    uint64_t tb_total = res->tb_active + res->tb_blank;
+    uint64_t f_tb_avg = (res->f_pixel_clock_max * tb_total) / htotal;
+
+    res->t_active_ref = (t_line_ns * cfg->hactive) / htotal;
+
+    res->t_blank_ref = (t_line_ns * cfg->hblank) / htotal;
+
+    uint64_t r_frl_eff = res->r_frl_char_min * (1000000 - res->overhead_ppm) / 1000000;
+
+    res->t_active_min = (3ULL * res->tb_active * 1000000000ULL) / (2ULL * cfg->lanes * r_frl_eff);
+
+    res->t_blank_min = (res->tb_blank * 1000000000ULL) / (cfg->lanes * r_frl_eff);
+
+    if (res->t_active_ref >= res->t_active_min && res->t_blank_ref >= res->t_blank_min) {
+        res->tb_borrowed = 0;
+        res->dfm_supported = true;
+    } else if (res->t_active_ref < res->t_active_min) {
+        uint64_t borrow_time_ns = res->t_active_min - res->t_active_ref;
+
+        res->tb_borrowed = CEILING(borrow_time_ns * f_tb_avg, 1000000000ULL);
+
+        if (res->tb_borrowed <= DFM_TB_BORROWED_MAX) {
+            res->dfm_supported = true;
+        } else {
+            res->dfm_supported = false;
+        }
+    } else {
+        /* Blanking needs more time than available */
+        res->dfm_supported = false;
+    }
+
+    if (!res->dfm_supported) {
+        res->total_supported = false;
+        return;
+    }
+
+    uint64_t total_chars_req = (3 * tb_total) / 2;
+    if (total_chars_req > res->cfrl_rc_savings) {
+        res->cfrl_actual_payload = (uint32_t)CEILING((total_chars_req - res->cfrl_rc_savings), 1);
+    } else {
+        res->cfrl_actual_payload = 0;
+    }
+
+    uint64_t util_ppm = ((uint64_t)res->cfrl_actual_payload * 1000000ULL) / res->cfrl_line;
+
+    int32_t margin_ppm = 1000000 - (int32_t)util_ppm + (int32_t)res->overhead_ppm;
+    res->margin_ppm = margin_ppm;
+
+    if (margin_ppm >= 0) {
+        res->utilization_supported = true;
+        res->total_supported = true;
+    } else {
+        res->utilization_supported = false;
+        res->total_supported = false;
+    }
 }
 
 static bool hdmi_decide_link_settings(
-	struct dc_stream_state *stream,
-	struct pipe_ctx *pipe_ctx)
+    struct dc_stream_state *stream,
+    struct pipe_ctx *pipe_ctx)
 {
-	uint8_t frl_rate;
-	uint32_t rate_bw;
-	uint32_t req_bw = dc_bandwidth_in_kbps_from_timing(&stream->timing,
-			dc_link_get_highest_encoding_format(stream->link));
+    struct dfm_config cfg;
+    struct dfm_results res;
+    uint8_t frl_rate;
+    static const uint32_t frl_rates_gbps[] = {3, 6, 6, 8, 10, 12};
+    uint8_t max_rate = stream->link->local_sink->edid_caps.frl_caps.max_rate;
 
-	for (frl_rate = 1;
-		frl_rate <= stream->link->local_sink->edid_caps.frl_caps.max_rate;
-		++frl_rate)
-	{
-		rate_bw = hdmi_get_max_frl_bw_kbps(frl_rate);
-		pr_err("HDMI FRL: rate_bw %u, req_bw %u\n", rate_bw, req_bw);
-		if (rate_bw >= req_bw) {
-			pipe_ctx->link_config.dp_link_settings.frl_rate = frl_rate;
-			pipe_ctx->link_config.dp_link_settings.lane_count = frl_rate <= 2 ? 3 : 4;
+    if (max_rate == 0 || max_rate > 6)
+        return false;
 
-			return true;
-		}
+    memset(&cfg, 0, sizeof(cfg));
+
+    cfg.pixel_clock_khz = stream->timing.pix_clk_100hz / 10;
+    cfg.hactive = stream->timing.h_addressable;
+    cfg.hblank = stream->timing.h_total - stream->timing.h_addressable;
+    cfg.encoding = stream->timing.pixel_encoding;
+
+    switch (stream->timing.display_color_depth) {
+    case COLOR_DEPTH_888:    cfg.bpc = 8;  break;
+    case COLOR_DEPTH_101010: cfg.bpc = 10; break;
+    case COLOR_DEPTH_121212: cfg.bpc = 12; break;
+    case COLOR_DEPTH_161616: cfg.bpc = 16; break;
+    default:
+        cfg.bpc = 8;
+        break;
+    }
+
+	if (stream->audio_info.mode_count) {
+		cfg.audio_enable = true;
+		/* If we assume the worst case (e.g. 192KHz 32 channel audio) we risk
+		 * unfairly pruning low res modes with short Hblank periods. Instead,
+		 * assume a standard surround sound mode that should allow all video
+		 * modes to work.
+		 */
+		cfg.audio_freq_hz = 48000;
+		cfg.audio_channels = 8;
 	}
 
-	return false;
+    for (frl_rate = 1; frl_rate <= max_rate; frl_rate++) {
+        cfg.frl_bit_rate_gbps = frl_rates_gbps[frl_rate - 1];
+        cfg.lanes = (frl_rate <= 2) ? 3 : 4;
+
+        perform_dfm_check(&cfg, &res);
+
+        if (res.total_supported) {
+            pipe_ctx->link_config.dp_link_settings.frl_rate = frl_rate;
+            pipe_ctx->link_config.dp_link_settings.lane_count = cfg.lanes;
+
+             pr_info("HDMI FRL: Rate %d Supported. Borrowed: %lu, Margin: %d ppm\n",
+             	frl_rate, res.tb_borrowed, res.margin_ppm);
+            return true;
+        }
+    }
+
+    return false;
 }
 
 enum dc_status resource_map_pool_resources(
