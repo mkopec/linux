@@ -2482,6 +2482,7 @@ static const struct dccg_funcs dccg35_funcs = {
 	.get_dccg_ref_freq = dccg31_get_dccg_ref_freq,
 	.dccg_init = dccg35_init,
 	.set_dpstreamclk = dccg35_set_dpstreamclk,
+	.set_hdmistreamclk = dccg35_set_hdmistreamclk,
 	.set_dpstreamclk_root_clock_gating = dccg35_set_dpstreamclk_root_clock_gating,
 	.enable_symclk32_se = dccg31_enable_symclk32_se,
 	.disable_symclk32_se = dccg35_disable_symclk32_se,
