@@ -137,14 +137,6 @@ poll_delay:
 
 		pr_err("FRL DEBUG: UPDATE_0 = 0x%02x\n", update);
 
-		if (update & SCDC_FRL_START_BIT) {
-			pr_err("FRL DEBUG: FRL_START asserted\n");
-			DC_LOG_HW_LINK_TRAINING(
-				"HDMI FRL: Link already trained\n");
-			enc->funcs->set_training_enable(enc, false);
-			return true;
-		}
-
 		if (!(update & SCDC_FLT_UPDATE_BIT)) {
 			pr_err("FRL DEBUG: FLT_UPDATE not set\n");
 			msleep(FRL_POLL_DELAY_MS);
