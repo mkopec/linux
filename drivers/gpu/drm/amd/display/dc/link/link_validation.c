@@ -329,51 +329,6 @@ static bool dp_validate_mode_timing(
 		return false;
 }
 
-static uint32_t hdmi_get_max_frl_bw_kbps(uint8_t frl_rate)
-{
-	static const uint8_t frl_lane_rate_gbps[] = {
-		[1] = 3, [2] = 6, [3] = 6, [4] = 8, [5] = 10, [6] = 12,
-	};
-
-	uint32_t lane_rate_gbps;
-	uint32_t lane_count;
-
-	if (frl_rate < 1 || frl_rate > 6)
-		return 0;
-
-	lane_count = (frl_rate <= 2) ? 3 : 4;
-	lane_rate_gbps = frl_lane_rate_gbps[frl_rate];
-
-	return lane_count * lane_rate_gbps * 1000000;
-}
-
-static bool hdmi_validate_mode_timing(
-    struct dc_link *link,
-    const struct dc_crtc_timing *timing)
-{
-    uint32_t pix_clk_100hz;
-	uint32_t mode_bw_kbps;
-	uint32_t max_frl_bw_kbps;
-
-    memset(&link->cur_link_settings, 0, sizeof(link->cur_link_settings));
-
-    pix_clk_100hz = get_tmds_output_pixel_clock_100hz(timing);
-	mode_bw_kbps = dc_bandwidth_in_kbps_from_timing(timing,
-		dc_link_get_highest_encoding_format(link));
-
-	max_frl_bw_kbps = hdmi_get_max_frl_bw_kbps(
-		link->local_sink->edid_caps.frl_caps.max_rate);
-
-	/* TMDS is always allowed. */
-    if (pix_clk_100hz <= 6000000)
-        return true;
-	/* FRL is allowed if the sink supports the required FRL rate. */
-    else if (mode_bw_kbps <= max_frl_bw_kbps)
-		return true;
-
-	return false;
-}
-
 enum dc_status link_validate_mode_timing(
 		const struct dc_stream_state *stream,
 		struct dc_link *link,
@@ -404,13 +359,7 @@ enum dc_status link_validate_mode_timing(
 				timing))
 			return DC_NO_DP_LINK_BANDWIDTH;
 		break;
-	case SIGNAL_TYPE_HDMI_TYPE_A:
-	case SIGNAL_TYPE_HDMI_FRL:
-		if (!hdmi_validate_mode_timing(
-				link,
-				timing))
-			return DC_NO_DP_LINK_BANDWIDTH;
-		break;
+
 	default:
 		break;
 	}
