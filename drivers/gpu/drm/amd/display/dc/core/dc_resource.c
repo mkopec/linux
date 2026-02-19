@@ -4044,7 +4044,6 @@ struct dfm_results {
 
 
 #define CEILING(x, y) (((x) + (y) - 1) / (y))
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 static uint32_t calc_overhead_ppm(uint8_t lanes)
 {
@@ -4274,7 +4273,7 @@ static bool hdmi_decide_link_settings(
             pipe_ctx->link_config.dp_link_settings.frl_rate = frl_rate;
             pipe_ctx->link_config.dp_link_settings.lane_count = cfg.lanes;
 
-             pr_info("HDMI FRL: Rate %d Supported. Borrowed: %lu, Margin: %d ppm\n",
+             pr_info("HDMI FRL: Rate %d Supported. Borrowed: %llu, Margin: %d ppm\n",
              	frl_rate, res.tb_borrowed, res.margin_ppm);
             return true;
         }
