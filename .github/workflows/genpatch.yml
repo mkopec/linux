@@ -1,0 +1,22 @@
+name: Generate patch
+on:
+  push:
+    branches: hdmi_frl
+
+jobs:
+  generate_patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: hdmi_frl
+          fetch-depth: 0
+      - name: Generate patch
+        run: git diff origin/master > 0001-amdgpu-frl.patch
+      - name: Save artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: "Patch"
+          path: 0001-amdgpu-frl.patch
+          retention-days: 30
