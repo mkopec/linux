@@ -298,12 +298,10 @@ static void dcn30_hpo_hdmi_stream_enc_setup_stream_attribute(
 	case PIXEL_ENCODING_YCBCR422:
 		pixel_encoding = 1;
 		break;
-	case PIXEL_ENCODING_YCBCR444:
+	case PIXEL_ENCODING_YCBCR420:
 		pixel_encoding = 2;
 		break;
-	case PIXEL_ENCODING_YCBCR420:
-		pixel_encoding = 3;
-		break;
+	case PIXEL_ENCODING_YCBCR444:
 	default: /* RGB */
 		pixel_encoding = 0;
 		break;
