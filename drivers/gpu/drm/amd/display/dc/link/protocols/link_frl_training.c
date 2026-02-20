@@ -64,6 +64,7 @@ bool dc_link_perform_frl_training(struct dc_link *link,
 	uint8_t write_buffer[2];
 	int poll;
 	int lane;
+	int post_training_timeout;
 
 	if (!enc || lane_count == 0 || lane_count > FRL_MAX_LANES)
 		return false;
@@ -89,6 +90,7 @@ bool dc_link_perform_frl_training(struct dc_link *link,
 	write_buffer[0] = 0x01;
 	frl_write_scdc(link, HDMI_SCDC_SOURCE_VERSION, &write_buffer[0], 1);
 
+retrain:
 	/* Reset FRL rate */
 	write_buffer[0] = 0;
 	write_buffer[1] = 0;
@@ -98,13 +100,14 @@ bool dc_link_perform_frl_training(struct dc_link *link,
 	/* Step 2: Wait for FLT_READY                                          */
 	/* ------------------------------------------------------------------ */
 	for (poll = 0; poll < FRL_MAX_POLLS; poll++) {
-		if (!frl_read_scdc(link, HDMI_SCDC_STATUS_FLAGS_0, &status, 1))
-			goto poll_delay;
+		if (!frl_read_scdc(link, HDMI_SCDC_STATUS_FLAGS_0, &status, 1)) {
+			msleep(FRL_POLL_DELAY_MS);
+			continue;
+		}
 
 		if (status & SCDC_FLT_READY_BIT)
 			break;
 
-poll_delay:
 		msleep(FRL_POLL_DELAY_MS);
 	}
 
@@ -172,10 +175,33 @@ poll_delay:
 		}
 
 		if (lane == lane_count) {
-			DC_LOG_HW_LINK_TRAINING(
-				"HDMI FRL: training successful\n");
 			enc->funcs->set_training_enable(enc, false);
-			return true;
+			for (post_training_timeout = 0;
+				post_training_timeout < FRL_MAX_POLLS;
+				post_training_timeout++) {
+				if (!frl_read_scdc(link, HDMI_SCDC_UPDATE_0, &update, 1)) {
+					msleep(FRL_POLL_DELAY_MS);
+					continue;
+				}
+
+				if (update & (SCDC_FLT_UPDATE_BIT | SCDC_FRL_START_BIT))
+					break;
+
+				msleep(FRL_POLL_DELAY_MS);
+			}
+
+			frl_write_scdc(link, HDMI_SCDC_UPDATE_0, &update, 1);
+
+			if (update & SCDC_FRL_START_BIT) {
+				DC_LOG_HW_LINK_TRAINING("HDMI FRL: training successful\n");
+				return true;
+			} else if (update & SCDC_FLT_UPDATE_BIT) {
+				DC_LOG_HW_LINK_TRAINING("HDMI FRL: retraining needed\n");
+				goto retrain;
+			} else {
+				DC_LOG_HW_LINK_TRAINING("HDMI FRL: did not receive status update!\n");
+				return false;
+			}
 		}
 
 		/* Program requested training patterns */
