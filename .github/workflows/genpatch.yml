@@ -1,4 +1,4 @@
-name: Generate patch
+name: Generate patch - Master branch
 on:
   push:
     branches: hdmi_frl
