@@ -106,6 +106,7 @@ enum crc_selection {
 
 enum otg_out_mux_dest {
 	OUT_MUX_DIO = 0,
+	OUT_MUX_HPO_HDMI = 1,
 	OUT_MUX_HPO_DP = 2,
 };
 

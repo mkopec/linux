@@ -2504,8 +2504,12 @@ void link_set_dpms_on(
 	pipe_ctx->stream->link->link_state_valid = true;
 
 	if (pipe_ctx->stream_res.tg->funcs->set_out_mux) {
-		if (dp_is_128b_132b_signal(pipe_ctx) || dc_is_hdmi_frl_signal(pipe_ctx->stream->signal))
+		if (dp_is_128b_132b_signal(pipe_ctx))
 			otg_out_dest = OUT_MUX_HPO_DP;
+		else if (dc_is_hdmi_frl_signal(pipe_ctx->stream->signal))
+			/* DCN401 unified the DP and HDMI output mux values */
+			otg_out_dest = (dc->ctx->dce_version < DCN_VERSION_4_01) ?
+				OUT_MUX_HPO_HDMI : OUT_MUX_HPO_DP;
 		else
 			otg_out_dest = OUT_MUX_DIO;
 		pipe_ctx->stream_res.tg->funcs->set_out_mux(pipe_ctx->stream_res.tg, otg_out_dest);
