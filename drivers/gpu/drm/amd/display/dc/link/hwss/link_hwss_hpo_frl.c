@@ -93,7 +93,8 @@ static void setup_hpo_hdmi_frl_audio_output(struct pipe_ctx *pipe_ctx,
 {
 	pipe_ctx->stream_res.hpo_hdmi_stream_enc->funcs->hdmi_audio_setup(
 		pipe_ctx->stream_res.hpo_hdmi_stream_enc, audio_inst,
-		&pipe_ctx->stream->audio_info, &audio_output->crtc_info);
+		&pipe_ctx->stream->audio_info, &audio_output->crtc_info,
+		pipe_ctx->stream->link->cur_link_settings.frl_rate);
 }
 
 static void enable_hpo_hdmi_frl_audio_packet(struct pipe_ctx *pipe_ctx)

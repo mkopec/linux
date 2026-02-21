@@ -380,8 +380,6 @@ struct hpo_dp_stream_encoder_funcs {
 };
 
 struct hpo_hdmi_stream_encoder_funcs {
-
-	/* Core lifecycle */
 	void (*enable)(
 		struct hpo_hdmi_stream_encoder *enc,
 		uint8_t source_select);
@@ -405,7 +403,8 @@ struct hpo_hdmi_stream_encoder_funcs {
 		struct hpo_hdmi_stream_encoder *enc,
 		unsigned int az_inst,
 		struct audio_info *info,
-		struct audio_crtc_info *audio_crtc_info);
+		struct audio_crtc_info *audio_crtc_info,
+		uint8_t frl_rate);
 
 	void (*hdmi_audio_enable)(
 		struct hpo_hdmi_stream_encoder *enc);

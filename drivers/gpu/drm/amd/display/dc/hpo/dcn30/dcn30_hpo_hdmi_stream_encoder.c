@@ -384,13 +384,55 @@ static void dcn30_hpo_hdmi_stream_enc_setup_stream_attribute(
 	REG_UPDATE(HDMI_TB_ENC_GC_CONTROL, HDMI_GC_AVMUTE, 0);
 }
 
+struct frl_audio_clock_info {
+	uint32_t frl_lane_rate;
+	/* N - 32KHz audio */
+	uint32_t n_32khz;
+	/* CTS - 32KHz audio*/
+	uint32_t cts_32khz;
+	uint32_t n_44khz;
+	uint32_t cts_44khz;
+	uint32_t n_48khz;
+	uint32_t cts_48khz;
+};
+
+/* Values set by the Windows driver seem to depend only on FRL rate*/
+static const struct frl_audio_clock_info frl_audio_clock_info_table[5] = {
+	{3,  4224, 171875, 5292, 156250, 5760, 156250},
+	{6,  4032, 328125, 5292, 312500, 6048, 328125},
+	{8,  4032, 437500, 3969, 312500, 6048, 437500},
+	{10, 3456, 468750, 3969, 390625, 5184, 468750},
+	{12, 3072, 500000, 3969, 468750, 4752, 515625},
+};
+
+static void get_frl_audio_clock_info(
+	struct frl_audio_clock_info *audio_clock_info,
+	uint8_t frl_rate)
+{
+	uint32_t index;
+	uint32_t frl_lane_rates[] = { 3, 6, 8, 10, 12 };
+	uint32_t frl_lane_rate;
+
+	ASSERT(frl_rate >= 0 && frl_rate <= 6);
+
+	frl_lane_rate = frl_lane_rates[frl_rate - 1];
+
+	/* search for FRL rate in table */
+	for (index = 0; index < sizeof(frl_lane_rates) / sizeof(uint32_t); index++)
+		if (frl_audio_clock_info_table[index].frl_lane_rate == frl_lane_rate)
+			*audio_clock_info = frl_audio_clock_info_table[index];
+
+	/* Should never happen */
+	*audio_clock_info = frl_audio_clock_info_table[0];
+}
+
 static void setup_hdmi_audio(struct hpo_hdmi_stream_encoder *enc,
-			     const struct audio_crtc_info *crtc_info)
+			     const struct audio_crtc_info *crtc_info, uint8_t frl_rate)
 {
 	struct dcn30_hpo_hdmi_stream_encoder *enc3 =
 		DCN3_0_HPO_HDMI_STREAM_ENC_FROM_HPO_STREAM_ENC(enc);
 
-	struct audio_clock_info audio_clock_info = { 0 };
+	struct frl_audio_clock_info audio_clock_info = { 0 };
 
 	/* Setup audio in AFMT - program AFMT block associated with HPO */
 	ASSERT(enc->afmt);
@@ -400,14 +442,7 @@ static void setup_hdmi_audio(struct hpo_hdmi_stream_encoder *enc,
 		     HDMI_ACR_SOURCE, 0, HDMI_ACR_AUDIO_PRIORITY, 0);
 
 	/* Program audio clock sample/regeneration parameters */
-	get_audio_clock_info(crtc_info->color_depth,
-			     crtc_info->requested_pixel_clock_100Hz,
-			     crtc_info->calculated_pixel_clock_100Hz,
-			     &audio_clock_info);
-	DC_LOG_HW_AUDIO("\n%s:Input::requested_pixel_clock_100Hz = %d"
-			"calculated_pixel_clock_100Hz = %d \n",
-			__func__, crtc_info->requested_pixel_clock_100Hz,
-			crtc_info->calculated_pixel_clock_100Hz);
+	get_frl_audio_clock_info(&audio_clock_info, frl_rate);
 
 	REG_UPDATE(HDMI_TB_ENC_ACR_32_0, HDMI_ACR_CTS_32,
 		   audio_clock_info.cts_32khz);
@@ -427,9 +462,10 @@ static void setup_hdmi_audio(struct hpo_hdmi_stream_encoder *enc,
 
 static void dcn30_hpo_hdmi_stream_enc_hdmi_audio_setup(
 	struct hpo_hdmi_stream_encoder *enc, unsigned int az_inst,
-	struct audio_info *info, struct audio_crtc_info *audio_crtc_info)
+	struct audio_info *info, struct audio_crtc_info *audio_crtc_info,
+	uint8_t frl_rate)
 {
-	setup_hdmi_audio(enc, audio_crtc_info);
+	setup_hdmi_audio(enc, audio_crtc_info, frl_rate);
 	ASSERT(enc->afmt);
 	enc->afmt->funcs->se_audio_setup(enc->afmt, az_inst, info);
 }
