@@ -1606,6 +1606,8 @@ static bool is_dtbclk_required(struct dc *dc, struct dc_state *context)
 			continue;
 		if (dc->link_srv->dp_is_128b_132b_signal(&context->res_ctx.pipe_ctx[i]))
 			return true;
+		if (dc_is_hdmi_frl_signal(context->res_ctx.pipe_ctx[i].stream->signal))
+			return true;
 	}
 	return false;
 }
