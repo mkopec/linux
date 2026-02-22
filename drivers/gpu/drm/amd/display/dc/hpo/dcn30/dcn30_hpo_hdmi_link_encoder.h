@@ -32,6 +32,7 @@ struct dcn30_hpo_hdmi_link_encoder_registers {
 };
 
 #define DCN3_0_HPO_HDMI_LINK_ENC_MASK_SH_LIST(mask_sh)                     \
+	SE_SF(HDMI_LINK_ENC_CONTROL, HDMI_LINK_ENC_ENABLE, mask_sh),           \
 	SE_SF(HDMI_LINK_ENC_CONTROL, HDMI_LINK_ENC_SOFT_RESET, mask_sh),       \
 	SE_SF(HDMI_LINK_ENC_CLK_CTRL, HDMI_LINK_ENC_CLOCK_EN,                  \
 		  mask_sh),                                                        \
