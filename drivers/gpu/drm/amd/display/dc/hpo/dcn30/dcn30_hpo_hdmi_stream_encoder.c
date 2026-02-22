@@ -420,9 +420,12 @@ static void get_frl_audio_clock_info(
 	/* search for FRL rate in table */
 	for (index = 0;
 		index < sizeof(frl_audio_clock_info_table) / sizeof(struct frl_audio_clock_info);
-		index++)
-		if (frl_audio_clock_info_table[index].frl_lane_rate == frl_lane_rate)
+		index++) {
+		if (frl_audio_clock_info_table[index].frl_lane_rate == frl_lane_rate) {
 			*audio_clock_info = frl_audio_clock_info_table[index];
+			return;
+		}
+	}
 
 	/* Should never happen */
 	*audio_clock_info = frl_audio_clock_info_table[0];
