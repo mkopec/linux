@@ -410,7 +410,7 @@ static void get_frl_audio_clock_info(
 	uint8_t frl_rate)
 {
 	uint32_t index;
-	uint32_t frl_lane_rates[] = { 3, 6, 8, 10, 12 };
+	uint32_t frl_lane_rates[] = { 3, 6, 6, 8, 10, 12 };
 	uint32_t frl_lane_rate;
 
 	ASSERT(frl_rate >= 0 && frl_rate <= 6);
