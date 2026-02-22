@@ -191,6 +191,11 @@ void dcn314_update_odm(struct dc *dc, struct dc_state *context, struct pipe_ctx 
 		pipe_ctx->stream_res.tg->funcs->set_odm_bypass(
 				pipe_ctx->stream_res.tg, &pipe_ctx->stream->timing);
 
+	/* no idea if this is the correct logic. but windows seems to pick manual mode */
+	if (dc_is_hdmi_frl_signal(pipe_ctx->stream->signal))
+			pipe_ctx->stream_res.tg->funcs->set_h_timing_div_manual_mode(
+					pipe_ctx->stream_res.tg, true);
+
 	if (mpc->funcs->set_out_rate_control) {
 		for (i = 0; i < opp_cnt; ++i) {
 			mpc->funcs->set_out_rate_control(
