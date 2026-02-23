@@ -371,6 +371,7 @@ static void dcn30_hpo_hdmi_stream_enc_setup_stream_attribute(
 	/* following belongs to audio */
 	/* Enable Audio InfoFrame packet transmission. */
 	REG_UPDATE(HDMI_TB_ENC_VBI_PACKET_CONTROL1, HDMI_AUDIO_INFO_SEND, 1);
+	REG_UPDATE(HDMI_TB_ENC_VBI_PACKET_CONTROL1, HDMI_AUDIO_INFO_CONT, 1);
 
 	/* update double-buffered AUDIO_INFO registers immediately */
 	ASSERT(enc->afmt);
