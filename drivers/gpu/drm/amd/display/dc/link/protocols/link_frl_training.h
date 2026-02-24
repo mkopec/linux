@@ -39,4 +39,15 @@ bool dc_link_perform_frl_training(struct dc_link *link,
  */
 void dc_link_disable_frl(struct dc_link *link);
 
+/*
+ * Perform HDMI DFM calculation to determine the optimal link settings.
+ *
+ * Returns:
+ *   true  - Link verification succeeded, link can be configured
+ *   false - Link verification failed, link cannot be configured
+ */
+bool hdmi_decide_link_settings(
+	struct dc_stream_state *stream,
+	struct pipe_ctx *pipe_ctx);
+
 #endif /* __LINK_HDMI_FRL_TRAINING_H__ */
