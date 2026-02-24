@@ -35,6 +35,28 @@ bool dc_link_perform_frl_training(struct dc_link *link,
 				  const struct link_resource *link_res);
 
 /*
+ * Attempt HDMI 2.1 FRL link training up to FRL_TRAINING_RETRIES times.
+ *
+ * @link:
+ *   DC link representing the HDMI connection.
+ *
+ * @link_res:
+ *   Link resources containing the HPO HDMI FRL link encoder.
+ *
+ * @frl_rate:
+ *   FRL rate index as defined by HDMI 2.1 (1–6).
+ *
+ * @lane_count:
+ *   Number of FRL lanes (3 or 4).
+ *
+ * Returns:
+ *   true  - training completed successfully, link is active
+ *   false - training failed, link is disabled
+ */
+bool dc_link_perform_frl_training_with_retries(struct dc_link *link,
+				  const struct link_resource *link_res);
+
+				  /*
  * Disable FRL mode in the sink. Allows fallback to TMDS.
  */
 void dc_link_disable_frl(struct dc_link *link);

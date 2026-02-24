@@ -1940,7 +1940,7 @@ static enum dc_status enable_link_hdmi(struct pipe_ctx *pipe_ctx)
 			pipe_ctx->stream->signal,
 			&link->cur_link_settings);
 
-		if (!dc_link_perform_frl_training(link, &pipe_ctx->link_res)) {
+		if (!dc_link_perform_frl_training_with_retries(link, &pipe_ctx->link_res)) {
 			DC_LOG_HW_LINK_TRAINING("HDMI FRL: training failed\n");
 			return DC_ERROR_UNEXPECTED;
 		}

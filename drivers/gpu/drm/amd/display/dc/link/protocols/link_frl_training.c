@@ -25,6 +25,8 @@
 #define FRL_POLL_DELAY_MS 2
 #define FRL_MAX_POLLS 100
 
+#define FRL_TRAINING_RETRIES 10
+
 static bool frl_read_scdc(struct dc_link *link, uint8_t offset, void *buf,
 			  uint32_t size)
 {
@@ -89,12 +91,6 @@ bool dc_link_perform_frl_training(struct dc_link *link,
 	/* Write source version = 1 */
 	write_buffer[0] = 0x01;
 	frl_write_scdc(link, HDMI_SCDC_SOURCE_VERSION, write_buffer, 1);
-
-retrain:
-	/* Reset FRL rate */
-	write_buffer[0] = 0;
-	write_buffer[1] = 0;
-	frl_write_scdc(link, HDMI_SCDC_CONFIG_0, write_buffer, 2);
 
 	/* ------------------------------------------------------------------ */
 	/* Step 2: Wait for FLT_READY                                          */
@@ -197,7 +193,7 @@ retrain:
 				return true;
 			} else if (update & SCDC_FLT_UPDATE_BIT) {
 				DC_LOG_HW_LINK_TRAINING("HDMI FRL: retraining needed\n");
-				goto retrain;
+				return false;
 			} else {
 				DC_LOG_HW_LINK_TRAINING("HDMI FRL: did not receive status update!\n");
 				return false;
@@ -242,6 +238,24 @@ fail:
 	frl_write_scdc(link, 0x30, write_buffer, 2);
 
 	return false;
+}
+
+bool dc_link_perform_frl_training_with_retries(struct dc_link *link,
+				  const struct link_resource *link_res)
+{
+	bool success;
+	int i;
+
+	for (i = 0; i < FRL_TRAINING_RETRIES; ++i) {
+		success = dc_link_perform_frl_training(link, link_res);
+
+		if (success)
+			break;
+
+		DC_LOG_HW_LINK_TRAINING("FRL: Training attempt %d failed!");
+	}
+
+	return success;
 }
 
 void dc_link_disable_frl(struct dc_link *link)
@@ -511,9 +525,6 @@ bool hdmi_decide_link_settings(
 	uint8_t frl_rate;
 	static const uint32_t frl_rates_gbps[] = {3, 6, 6, 8, 10, 12};
 	uint8_t max_rate = stream->link->local_sink->edid_caps.frl_caps.max_rate;
-	uint8_t best_borrow_rate = 0;
-    uint8_t best_borrow_lanes = 0;
-    struct dfm_results best_borrow_res = {0};
 
 	if (max_rate == 0 || max_rate > 6)
 		return false;
@@ -553,28 +564,13 @@ bool hdmi_decide_link_settings(
 		perform_dfm_check(&cfg, &res);
 
 		if (res.total_supported) {
-			if (res.tb_borrowed == 0) {
-				pipe_ctx->link_config.dp_link_settings.frl_rate = frl_rate;
-				pipe_ctx->link_config.dp_link_settings.lane_count = cfg.lanes;
+			pipe_ctx->link_config.dp_link_settings.frl_rate = frl_rate;
+			pipe_ctx->link_config.dp_link_settings.lane_count = cfg.lanes;
 
-				pr_info("HDMI FRL: Rate %d Supported. Borrowed: 0, Margin: %d ppm\n",
-						frl_rate, res.margin_ppm);
-				return true;
-			} else if (best_borrow_rate == 0) {
-				best_borrow_rate = frl_rate;
-				best_borrow_lanes = cfg.lanes;
-				best_borrow_res = res;
-			}
+			pr_info("HDMI FRL: Rate %d Supported. Borrowed: %d, Margin: %d ppm\n",
+					frl_rate, res.tb_borrowed, res.margin_ppm);
+			return true;
 		}
-	}
-
-	if (best_borrow_rate > 0) {
-		pipe_ctx->link_config.dp_link_settings.frl_rate = best_borrow_rate;
-		pipe_ctx->link_config.dp_link_settings.lane_count = best_borrow_lanes;
-
-		pr_info("HDMI FRL: Rate %d Supported (with borrowing). Borrowed: %llu, Margin: %d ppm\n",
-				best_borrow_rate, best_borrow_res.tb_borrowed, best_borrow_res.margin_ppm);
-		return true;
 	}
 
 	return false;
