@@ -34,4 +34,9 @@ struct link_resource;
 bool dc_link_perform_frl_training(struct dc_link *link,
 				  const struct link_resource *link_res);
 
+/*
+ * Disable FRL mode in the sink. Allows fallback to TMDS.
+ */
+void dc_link_disable_frl(struct dc_link *link);
+
 #endif /* __LINK_HDMI_FRL_TRAINING_H__ */

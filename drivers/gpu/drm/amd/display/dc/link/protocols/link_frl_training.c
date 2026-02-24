@@ -88,13 +88,13 @@ bool dc_link_perform_frl_training(struct dc_link *link,
 
 	/* Write source version = 1 */
 	write_buffer[0] = 0x01;
-	frl_write_scdc(link, HDMI_SCDC_SOURCE_VERSION, &write_buffer[0], 1);
+	frl_write_scdc(link, HDMI_SCDC_SOURCE_VERSION, write_buffer, 1);
 
 retrain:
 	/* Reset FRL rate */
 	write_buffer[0] = 0;
 	write_buffer[1] = 0;
-	frl_write_scdc(link, 0x30, &write_buffer[0], 2);
+	frl_write_scdc(link, HDMI_SCDC_CONFIG_0, write_buffer, 2);
 
 	/* ------------------------------------------------------------------ */
 	/* Step 2: Wait for FLT_READY                                          */
@@ -242,4 +242,14 @@ fail:
 	frl_write_scdc(link, 0x30, write_buffer, 2);
 
 	return false;
+}
+
+void dc_link_disable_frl(struct dc_link *link)
+{
+	uint8_t write_buffer[2];
+
+	/* Inform the sink not to expect an FRL signal */
+	write_buffer[0] = 0;
+	write_buffer[1] = 0;
+	frl_write_scdc(link, HDMI_SCDC_CONFIG_0, write_buffer, 2);
 }
