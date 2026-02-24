@@ -243,8 +243,19 @@ fail:
 bool dc_link_perform_frl_training_with_retries(struct dc_link *link,
 				  const struct link_resource *link_res)
 {
+	uint8_t min_rate;
 	bool success;
 	int i;
+
+	/*
+	 * We will attempt the highest rate first, then fall back to a lower rate
+	 * Ideally, the sink would respond with a lower rate request, but my
+	 * Samsung S95B just doesn't. So we do this here instead.
+	 */
+
+	min_rate = link->cur_link_settings.frl_rate;
+	link->cur_link_settings.frl_rate = link->local_sink->edid_caps.frl_caps.max_rate;
+	link->cur_link_settings.lane_count = link->cur_link_settings.frl_rate <= 2 ? 3 : 4;
 
 	for (i = 0; i < FRL_TRAINING_RETRIES; ++i) {
 		success = dc_link_perform_frl_training(link, link_res);
@@ -252,7 +263,14 @@ bool dc_link_perform_frl_training_with_retries(struct dc_link *link,
 		if (success)
 			break;
 
-		DC_LOG_HW_LINK_TRAINING("FRL: Training attempt %d failed!");
+		if (link->cur_link_settings.frl_rate > min_rate) {
+			link->cur_link_settings.frl_rate--;
+			link->cur_link_settings.lane_count =
+				link->cur_link_settings.frl_rate <= 2 ? 3 : 4;
+		}
+
+		DC_LOG_HW_LINK_TRAINING("FRL: Training attempt %d failed! Will attempt rate %d next",
+			i, link->cur_link_settings.frl_rate);
 	}
 
 	return success;
@@ -567,7 +585,7 @@ bool hdmi_decide_link_settings(
 			pipe_ctx->link_config.dp_link_settings.frl_rate = frl_rate;
 			pipe_ctx->link_config.dp_link_settings.lane_count = cfg.lanes;
 
-			pr_info("HDMI FRL: Rate %d Supported. Borrowed: %d, Margin: %d ppm\n",
+			DC_LOG_HW_LINK_TRAINING("HDMI FRL: Rate %d Supported. Borrowed: %llu, Margin: %d ppm\n",
 					frl_rate, res.tb_borrowed, res.margin_ppm);
 			return true;
 		}
