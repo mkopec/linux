@@ -1455,7 +1455,8 @@ void build_audio_output(
 
 	if (state->clk_mgr &&
 		(pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT ||
-			pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT_MST)) {
+			pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT_MST ||
+			pipe_ctx->stream->signal == SIGNAL_TYPE_HDMI_FRL)) {
 		audio_output->pll_info.audio_dto_source_clock_in_khz =
 				state->clk_mgr->funcs->get_dp_ref_clk_frequency(
 						state->clk_mgr);
@@ -2399,7 +2400,7 @@ static void dce110_setup_audio_dto(
 
 		if (pipe_ctx->top_pipe)
 			continue;
-		if (pipe_ctx->stream->signal != SIGNAL_TYPE_HDMI_TYPE_A)
+		if (!dc_is_hdmi_signal(pipe_ctx->stream->signal))
 			continue;
 		if (pipe_ctx->stream_res.audio != NULL) {
 			struct audio_output audio_output;
