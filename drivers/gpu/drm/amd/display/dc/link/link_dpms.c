@@ -2412,9 +2412,6 @@ void link_set_dpms_off(struct pipe_ctx *pipe_ctx)
 		}
 	}
 
-	if (dc_is_hdmi_signal(pipe_ctx->stream->signal))
-		dc_link_disable_frl(pipe_ctx->stream->link);
-
 	if (pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT &&
 			!dp_is_128b_132b_signal(pipe_ctx)) {
 
