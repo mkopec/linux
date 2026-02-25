@@ -172,6 +172,8 @@ bool dc_link_perform_frl_training(struct dc_link *link,
 
 		if (lane == lane_count) {
 			enc->funcs->set_training_enable(enc, false);
+			/* Delay to let the sink settle after clearing SCDC_UPDATE_0 */
+			msleep(FRL_POLL_DELAY_MS);
 			for (post_training_timeout = 0;
 				post_training_timeout < FRL_MAX_POLLS;
 				post_training_timeout++) {
@@ -270,7 +272,7 @@ bool dc_link_perform_frl_training_with_retries(struct dc_link *link,
 		}
 
 		DC_LOG_HW_LINK_TRAINING("FRL: Training attempt %d failed! Will attempt rate %d next",
-			i, link->cur_link_settings.frl_rate);
+			i + 1, link->cur_link_settings.frl_rate);
 	}
 
 	return success;
