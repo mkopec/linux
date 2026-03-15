@@ -1600,7 +1600,13 @@ enum dc_status dce110_apply_single_controller_ctx_to_hw(
 		hws->funcs.disable_stream_gating(dc, pipe_ctx);
 	}
 
-	if (pipe_ctx->stream_res.audio != NULL) {
+	/* For HDMI FRL, the FRL rate may change during link training (rate
+	 * fallback). Defer audio setup until after set_dpms_on so that
+	 * pipe_ctx->link_config.dp_link_settings.frl_rate reflects the
+	 * actually-trained rate when hdmi_audio_setup is called.
+	 */
+	if (pipe_ctx->stream_res.audio != NULL &&
+			!dc_is_hdmi_frl_signal(pipe_ctx->stream->signal)) {
 		struct audio_output audio_output = {0};
 
 		build_audio_output(context, pipe_ctx, &audio_output);
@@ -1702,6 +1708,26 @@ enum dc_status dce110_apply_single_controller_ctx_to_hw(
 
 	if (!stream->dpms_off)
 		dc->link_srv->set_dpms_on(context, pipe_ctx);
+
+	/* HDMI FRL audio setup deferred from above: pipe_ctx->link_config now
+	 * holds the actually-trained FRL rate after any rate fallback.
+	 */
+	if (pipe_ctx->stream_res.audio != NULL &&
+			dc_is_hdmi_frl_signal(pipe_ctx->stream->signal)) {
+		struct audio_output audio_output = {0};
+
+		build_audio_output(context, pipe_ctx, &audio_output);
+
+		link_hwss->setup_audio_output(pipe_ctx, &audio_output,
+				pipe_ctx->stream_res.audio->inst);
+
+		pipe_ctx->stream_res.audio->funcs->az_configure(
+				pipe_ctx->stream_res.audio,
+				pipe_ctx->stream->signal,
+				&audio_output.crtc_info,
+				&pipe_ctx->stream->audio_info,
+				&audio_output.dp_link_info);
+	}
 
 	/* DCN3.1 FPGA Workaround
 	 * Need to enable HPO DP Stream Encoder before setting OTG master enable.

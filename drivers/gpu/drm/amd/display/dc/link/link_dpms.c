@@ -1944,6 +1944,16 @@ static enum dc_status enable_link_hdmi(struct pipe_ctx *pipe_ctx)
 			DC_LOG_HW_LINK_TRAINING("HDMI FRL: training failed\n");
 			return DC_ERROR_UNEXPECTED;
 		}
+
+		/* Sync the trained rate back so the audio setup in
+		 * dce110_apply_single_controller_ctx_to_hw uses the correct
+		 * FRL rate after any rate fallback during training.
+		 */
+		pipe_ctx->link_config.dp_link_settings.frl_rate =
+			link->cur_link_settings.frl_rate;
+		pipe_ctx->link_config.dp_link_settings.lane_count =
+			link->cur_link_settings.lane_count;
+
 		return DC_OK;
 	}
 
