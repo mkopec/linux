@@ -10,6 +10,7 @@
 #include "link_hwss.h"
 #include "link_ddc.h"
 #include "dc_hdmi_types.h"
+#include "resource.h"
 
 #define DC_LOGGER link->ctx->logger
 
@@ -249,8 +250,9 @@ fail:
 bool dc_link_perform_frl_training_with_retries(struct dc_link *link,
 				  const struct link_resource *link_res)
 {
+	const struct link_hwss *link_hwss = get_link_hwss(link, link_res);
 	uint8_t min_rate;
-	bool success;
+	bool success = false;
 	int i;
 
 	/*
@@ -264,6 +266,19 @@ bool dc_link_perform_frl_training_with_retries(struct dc_link *link,
 	link->cur_link_settings.lane_count = link->cur_link_settings.frl_rate <= 2 ? 3 : 4;
 
 	for (i = 0; i < FRL_TRAINING_RETRIES; ++i) {
+		/* Reprogram the PHY for the current rate attempt. The caller
+		 * (enable_link_hdmi) already called enable_hdmi_link_output once
+		 * at the DFM-selected rate; disable and re-enable here so the
+		 * PHY clock matches whatever rate we are about to train at.
+		 */
+		link_hwss->disable_link_output(link, link_res,
+					       link->connector_signal);
+		if (link_hwss->ext.enable_hdmi_link_output)
+			link_hwss->ext.enable_hdmi_link_output(
+				link, link_res,
+				link->connector_signal,
+				&link->cur_link_settings);
+
 		success = dc_link_perform_frl_training(link, link_res);
 
 		if (success)
