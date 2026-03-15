@@ -57,6 +57,8 @@
 #include "dcn32/dcn32_dio_stream_encoder.h"
 #include "dcn31/dcn31_hpo_dp_stream_encoder.h"
 #include "dcn31/dcn31_hpo_dp_link_encoder.h"
+#include "dcn30/dcn30_hpo_hdmi_stream_encoder.h"
+#include "dcn30/dcn30_hpo_hdmi_link_encoder.h"
 #include "dcn32/dcn32_hpo_dp_link_encoder.h"
 #include "dcn31/dcn31_apg.h"
 #include "dcn31/dcn31_dio_link_encoder.h"
@@ -345,6 +347,18 @@ static const struct dcn31_hpo_dp_stream_encoder_mask hpo_dp_se_mask = {
 	DCN3_1_HPO_DP_STREAM_ENC_MASK_SH_LIST(_MASK)
 };
 
+#define hpo_hdmi_stream_encoder_reg_init()\
+	DCN3_0_HPO_HDMI_STREAM_ENC_REG_LIST()
+
+static struct dcn30_hpo_hdmi_stream_encoder_registers hpo_hdmi_stream_enc_regs;
+
+static const struct dcn30_hpo_hdmi_stream_encoder_shift hpo_hdmi_se_shift = {
+	DCN3_0_HPO_HDMI_STREAM_ENC_MASK_SH_LIST(__SHIFT)
+};
+
+static const struct dcn30_hpo_hdmi_stream_encoder_mask hpo_hdmi_se_mask = {
+	DCN3_0_HPO_HDMI_STREAM_ENC_MASK_SH_LIST(_MASK)
+};
 
 #define hpo_dp_link_encoder_reg_init(id)\
 	DCN3_1_HPO_DP_LINK_ENC_REG_LIST_RI(id)
@@ -361,6 +375,19 @@ static const struct dcn31_hpo_dp_link_encoder_shift hpo_dp_le_shift = {
 
 static const struct dcn31_hpo_dp_link_encoder_mask hpo_dp_le_mask = {
 	DCN3_2_HPO_DP_LINK_ENC_MASK_SH_LIST(_MASK)
+};
+
+#define hpo_hdmi_link_encoder_reg_init()\
+	DCN3_0_HPO_HDMI_LINK_ENC_REG_LIST()
+
+static struct dcn30_hpo_hdmi_link_encoder_registers hpo_hdmi_link_enc_regs;
+
+static const struct dcn30_hpo_hdmi_link_encoder_shift hpo_hdmi_le_shift = {
+	DCN3_0_HPO_HDMI_LINK_ENC_MASK_SH_LIST(__SHIFT)
+};
+
+static const struct dcn30_hpo_hdmi_link_encoder_mask hpo_hdmi_le_mask = {
+	DCN3_0_HPO_HDMI_LINK_ENC_MASK_SH_LIST(_MASK)
 };
 
 #define dpp_regs_init(id)\
@@ -651,6 +678,8 @@ static const struct resource_caps res_cap_dcn32 = {
 	.num_stream_encoder = 5,
 	.num_hpo_dp_stream_encoder = 4,
 	.num_hpo_dp_link_encoder = 2,
+	.num_hpo_hdmi_stream_encoder = 1,
+	.num_hpo_hdmi_link_encoder = 1,
 	.num_pll = 5,
 	.num_dwb = 1,
 	.num_ddc = 5,
@@ -1299,6 +1328,48 @@ static struct hpo_dp_stream_encoder *dcn32_hpo_dp_stream_encoder_create(
 	return &hpo_dp_enc31->base;
 }
 
+static struct hpo_hdmi_stream_encoder *dcn32_hpo_hdmi_stream_encoder_create(
+	enum engine_id eng_id,
+	struct dc_context *ctx)
+{
+	struct dcn30_hpo_hdmi_stream_encoder *hpo_hdmi_enc30;
+	struct vpg *vpg;
+	struct afmt *afmt;
+	uint32_t hpo_hdmi_inst;
+	uint32_t vpg_inst;
+	uint32_t afmt_inst;
+
+	hpo_hdmi_inst = eng_id - ENGINE_ID_HPO_0;
+
+	/* Mapping of VPG register blocks to HPO HDMI block instance:
+	 * VPG[5] -> HPO_HDMI[0]
+	 * AFMT[5] -> HPO_HDMI[0]
+	 */
+	vpg_inst = hpo_hdmi_inst + 5;
+	afmt_inst = hpo_hdmi_inst + 5;
+
+	/* allocate HPO stream encoder and create VPG sub-block */
+	hpo_hdmi_enc30 = kzalloc(sizeof(struct dcn30_hpo_hdmi_stream_encoder), GFP_KERNEL);
+	vpg = dcn32_vpg_create(ctx, vpg_inst);
+	afmt = dcn32_afmt_create(ctx, afmt_inst);
+
+	if (!hpo_hdmi_enc30 || !vpg || !afmt) {
+		kfree(hpo_hdmi_enc30);
+		kfree(vpg);
+		return NULL;
+	}
+
+#undef REG_STRUCT
+#define REG_STRUCT hpo_hdmi_stream_enc_regs
+	hpo_hdmi_stream_encoder_reg_init(),
+
+	dcn30_hpo_hdmi_stream_encoder_construct(hpo_hdmi_enc30, ctx, hpo_hdmi_inst,
+					vpg, afmt, &hpo_hdmi_stream_enc_regs,
+					&hpo_hdmi_se_shift, &hpo_hdmi_se_mask);
+
+	return &hpo_hdmi_enc30->base;
+}
+
 static struct hpo_dp_link_encoder *dcn32_hpo_dp_link_encoder_create(
 	uint8_t inst,
 	struct dc_context *ctx)
@@ -1320,6 +1391,28 @@ static struct hpo_dp_link_encoder *dcn32_hpo_dp_link_encoder_create(
 					&hpo_dp_le_shift, &hpo_dp_le_mask);
 
 	return &hpo_dp_enc31->base;
+}
+
+static struct hpo_hdmi_link_encoder *dcn32_hpo_hdmi_link_encoder_create(
+	uint8_t inst,
+	struct dc_context *ctx)
+{
+	struct dcn30_hpo_hdmi_link_encoder *hpo_hdmi_enc30;
+
+	/* allocate HPO link encoder */
+	hpo_hdmi_enc30 = kzalloc(sizeof(struct dcn30_hpo_hdmi_link_encoder), GFP_KERNEL);
+	if (!hpo_hdmi_enc30)
+		return NULL; /* out of memory */
+
+#undef REG_STRUCT
+#define REG_STRUCT hpo_hdmi_link_enc_regs
+	hpo_hdmi_link_encoder_reg_init(),
+
+	hpo_hdmi_link_encoder31_construct(hpo_hdmi_enc30, ctx, inst,
+					&hpo_hdmi_link_enc_regs,
+					&hpo_hdmi_le_shift, &hpo_hdmi_le_mask);
+
+	return &hpo_hdmi_enc30->base;
 }
 
 static struct dce_hwseq *dcn32_hwseq_create(
@@ -1345,6 +1438,8 @@ static const struct resource_create_funcs res_create_funcs = {
 	.create_stream_encoder = dcn32_stream_encoder_create,
 	.create_hpo_dp_stream_encoder = dcn32_hpo_dp_stream_encoder_create,
 	.create_hpo_dp_link_encoder = dcn32_hpo_dp_link_encoder_create,
+	.create_hpo_hdmi_stream_encoder = dcn32_hpo_hdmi_stream_encoder_create,
+	.create_hpo_hdmi_link_encoder = dcn32_hpo_hdmi_link_encoder_create,
 	.create_hwseq = dcn32_hwseq_create,
 };
 

@@ -157,6 +157,7 @@ struct dc_link_settings {
 	enum dc_link_spread link_spread;
 	bool use_link_rate_set;
 	uint8_t link_rate_set;
+	uint8_t frl_rate;
 };
 
 struct dc_tunnel_settings {

@@ -847,6 +847,9 @@ struct amdgpu_dm_connector {
 	unsigned int hdmi_hpd_debounce_delay_ms;
 	struct delayed_work hdmi_hpd_debounce_work;
 	struct dc_sink *hdmi_prev_sink;
+
+	/* HDMI ALLM */
+	bool hdmi_allm_capable;
 };
 
 static inline void amdgpu_dm_set_mst_status(uint8_t *status,
@@ -1020,6 +1023,7 @@ struct dm_connector_state {
 	uint8_t underscan_hborder;
 	bool underscan_enable;
 	bool freesync_capable;
+	bool freesync_on_desktop_capable;
 	bool update_hdcp;
 	bool abm_sysfs_forbidden;
 	uint8_t abm_level;

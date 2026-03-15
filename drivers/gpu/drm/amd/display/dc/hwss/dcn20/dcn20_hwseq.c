@@ -877,7 +877,7 @@ enum dc_status dcn20_enable_stream_timing(
 		return DC_ERROR_UNEXPECTED;
 	}
 
-	if (dc->link_srv->dp_is_128b_132b_signal(pipe_ctx)) {
+	if (dc->link_srv->dp_is_128b_132b_signal(pipe_ctx) || dc_is_hdmi_frl_signal(pipe_ctx->stream->signal)) {
 		struct dccg *dccg = dc->res_pool->dccg;
 		struct timing_generator *tg = pipe_ctx->stream_res.tg;
 		struct dtbclk_dto_params dto_params = {0};
@@ -3019,6 +3019,7 @@ void dcn20_enable_stream(struct pipe_ctx *pipe_ctx)
 	struct dccg *dccg = dc->res_pool->dccg;
 	enum phyd32clk_clock_source phyd32clk;
 	int dp_hpo_inst;
+	int hdmi_hpo_inst = 0;
 
 	struct link_encoder *link_enc = pipe_ctx->link_res.dio_link_enc;
 	struct stream_encoder *stream_enc = pipe_ctx->stream_res.stream_enc;
@@ -3042,6 +3043,15 @@ void dcn20_enable_stream(struct pipe_ctx *pipe_ctx)
 		} else {
 			dccg->funcs->enable_symclk32_se(dccg, dp_hpo_inst, phyd32clk);
 		}
+	} else if (dc_is_hdmi_frl_signal(pipe_ctx->stream->signal)) {
+		dto_params.otg_inst = tg->inst;
+		dto_params.pixclk_khz = pipe_ctx->stream->timing.pix_clk_100hz / 10;
+		dto_params.num_odm_segments = get_odm_segment_count(pipe_ctx);
+		dto_params.timing = &pipe_ctx->stream->timing;
+		dto_params.ref_dtbclk_khz = dc->clk_mgr->funcs->get_dtb_ref_clk_frequency(dc->clk_mgr);
+		dccg->funcs->set_dtbclk_dto(dccg, &dto_params);
+		hdmi_hpo_inst = pipe_ctx->stream_res.hpo_hdmi_stream_enc->inst;
+		dccg->funcs->set_hdmistreamclk(dccg, DTBCLK0, tg->inst, hdmi_hpo_inst);
 	} else {
 		if (dccg->funcs->enable_symclk_se && link_enc) {
 			if (link->ep_type == DISPLAY_ENDPOINT_USB4_DPIA

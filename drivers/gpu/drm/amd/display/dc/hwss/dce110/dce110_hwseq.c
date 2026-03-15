@@ -1143,6 +1143,7 @@ void dce110_disable_stream(struct pipe_ctx *pipe_ctx)
 	struct timing_generator *tg = pipe_ctx->stream_res.tg;
 	struct dtbclk_dto_params dto_params = {0};
 	int dp_hpo_inst;
+	int hdmi_hpo_inst;
 	struct link_encoder *link_enc = pipe_ctx->link_res.dio_link_enc;
 	struct stream_encoder *stream_enc = pipe_ctx->stream_res.stream_enc;
 
@@ -1154,6 +1155,9 @@ void dce110_disable_stream(struct pipe_ctx *pipe_ctx)
 			pipe_ctx->stream_res.stream_enc);
 		pipe_ctx->stream_res.stream_enc->funcs->hdmi_reset_stream_attribute(
 			pipe_ctx->stream_res.stream_enc);
+	} else if (dc_is_hdmi_frl_signal(pipe_ctx->stream->signal)) {
+		pipe_ctx->stream_res.hpo_hdmi_stream_enc->funcs->stop_hdmi_info_packets(
+			pipe_ctx->stream_res.hpo_hdmi_stream_enc);
 	}
 
 	if (dc->link_srv->dp_is_128b_132b_signal(pipe_ctx)) {
@@ -1174,6 +1178,17 @@ void dce110_disable_stream(struct pipe_ctx *pipe_ctx)
 		if (dccg) {
 			dccg->funcs->disable_symclk32_se(dccg, dp_hpo_inst);
 			dccg->funcs->set_dpstreamclk(dccg, REFCLK, tg->inst, dp_hpo_inst);
+			if (!(dc->ctx->dce_version >= DCN_VERSION_3_5)) {
+				if (dccg && dccg->funcs->set_dtbclk_dto)
+					dccg->funcs->set_dtbclk_dto(dccg, &dto_params);
+			}
+		}
+	} else if (dc_is_hdmi_frl_signal(pipe_ctx->stream->signal) && dccg) {
+		dto_params.otg_inst = tg->inst;
+		dto_params.timing = &pipe_ctx->stream->timing;
+		hdmi_hpo_inst = pipe_ctx->stream_res.hpo_hdmi_stream_enc->inst;
+		if (dccg) {
+			dccg->funcs->set_hdmistreamclk(dccg, REFCLK, tg->inst, hdmi_hpo_inst);
 			if (!(dc->ctx->dce_version >= DCN_VERSION_3_5)) {
 				if (dccg && dccg->funcs->set_dtbclk_dto)
 					dccg->funcs->set_dtbclk_dto(dccg, &dto_params);
@@ -1440,7 +1455,8 @@ void build_audio_output(
 
 	if (state->clk_mgr &&
 		(pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT ||
-			pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT_MST)) {
+			pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT_MST ||
+			pipe_ctx->stream->signal == SIGNAL_TYPE_HDMI_FRL)) {
 		audio_output->pll_info.audio_dto_source_clock_in_khz =
 				state->clk_mgr->funcs->get_dp_ref_clk_frequency(
 						state->clk_mgr);
@@ -1584,7 +1600,13 @@ enum dc_status dce110_apply_single_controller_ctx_to_hw(
 		hws->funcs.disable_stream_gating(dc, pipe_ctx);
 	}
 
-	if (pipe_ctx->stream_res.audio != NULL) {
+	/* For HDMI FRL, the FRL rate may change during link training (rate
+	 * fallback). Defer audio setup until after set_dpms_on so that
+	 * pipe_ctx->link_config.dp_link_settings.frl_rate reflects the
+	 * actually-trained rate when hdmi_audio_setup is called.
+	 */
+	if (pipe_ctx->stream_res.audio != NULL &&
+			!dc_is_hdmi_frl_signal(pipe_ctx->stream->signal)) {
 		struct audio_output audio_output = {0};
 
 		build_audio_output(context, pipe_ctx, &audio_output);
@@ -1686,6 +1708,26 @@ enum dc_status dce110_apply_single_controller_ctx_to_hw(
 
 	if (!stream->dpms_off)
 		dc->link_srv->set_dpms_on(context, pipe_ctx);
+
+	/* HDMI FRL audio setup deferred from above: pipe_ctx->link_config now
+	 * holds the actually-trained FRL rate after any rate fallback.
+	 */
+	if (pipe_ctx->stream_res.audio != NULL &&
+			dc_is_hdmi_frl_signal(pipe_ctx->stream->signal)) {
+		struct audio_output audio_output = {0};
+
+		build_audio_output(context, pipe_ctx, &audio_output);
+
+		link_hwss->setup_audio_output(pipe_ctx, &audio_output,
+				pipe_ctx->stream_res.audio->inst);
+
+		pipe_ctx->stream_res.audio->funcs->az_configure(
+				pipe_ctx->stream_res.audio,
+				pipe_ctx->stream->signal,
+				&audio_output.crtc_info,
+				&pipe_ctx->stream->audio_info,
+				&audio_output.dp_link_info);
+	}
 
 	/* DCN3.1 FPGA Workaround
 	 * Need to enable HPO DP Stream Encoder before setting OTG master enable.
@@ -2384,7 +2426,7 @@ static void dce110_setup_audio_dto(
 
 		if (pipe_ctx->top_pipe)
 			continue;
-		if (pipe_ctx->stream->signal != SIGNAL_TYPE_HDMI_TYPE_A)
+		if (!dc_is_hdmi_signal(pipe_ctx->stream->signal))
 			continue;
 		if (pipe_ctx->stream_res.audio != NULL) {
 			struct audio_output audio_output;

@@ -231,13 +231,16 @@ void dcn35_disable_otg_wa(struct clk_mgr *clk_mgr_base, struct dc_state *context
 
 		if (old_pipe->stream && new_pipe->stream && old_pipe->stream == new_pipe->stream) {
 			has_active_hpo =  dccg->ctx->dc->link_srv->dp_is_128b_132b_signal(old_pipe) &&
-			dccg->ctx->dc->link_srv->dp_is_128b_132b_signal(new_pipe);
+				dccg->ctx->dc->link_srv->dp_is_128b_132b_signal(new_pipe);
 
+			has_active_hpo |= dc_is_hdmi_frl_signal(old_pipe->stream->signal) &&
+				dc_is_hdmi_frl_signal(new_pipe->stream->signal);
 		}
 
 		if (!has_active_hpo && !stream_changed_otg_dig_on && pipe->stream &&
 		    (pipe->stream->dpms_off || dc_is_virtual_signal(pipe->stream->signal) || !pipe_link_enc) &&
-		    !dccg->ctx->dc->link_srv->dp_is_128b_132b_signal(pipe)) {
+		    !dccg->ctx->dc->link_srv->dp_is_128b_132b_signal(pipe) &&
+			!dc_is_hdmi_frl_signal(pipe->stream->signal)) {
 			/* This w/a should not trigger when we have a dig active */
 			if (disable) {
 				if (pipe->stream_res.tg && pipe->stream_res.tg->funcs->immediate_disable_crtc)

@@ -58,6 +58,12 @@ enum drm_connector_force {
 	DRM_FORCE_ON_DIGITAL, /* for DVI-I use digital connector */
 };
 
+enum drm_allm_mode {
+	DRM_ALLM_MODE_DISABLED,
+	DRM_ALLM_MODE_ENABLED_DYNAMIC,
+	DRM_ALLM_MODE_ENABLED_FORCED,
+};
+
 /**
  * enum drm_connector_status - status for a &drm_connector
  *
@@ -255,6 +261,62 @@ struct drm_scdc {
 };
 
 /**
+ * struct drm_hdmi_frl_cap - FRL capabilities of HDMI sink
+ *
+ * Describes the FRL support provided by HDMI 2.1 sink.
+ * The information is fetched fom additional HFVSDB blocks defined
+ * for HDMI 2.1.
+ */
+struct drm_hdmi_frl_cap {
+	/** @max_rate: raw max rate value without parsing */
+	u8 max_rate;
+
+	/** @max_frl_rate_per_lane: support fixed rate link */
+	u8 max_rate_per_lane;
+
+	/** @max_lanes: supported by sink */
+	u8 max_lanes;
+};
+
+/*
+ * struct drm_hdmi_vrr_cap - Information about VRR capabilities of a HDMI sink
+ *
+ * Describes the VRR support provided by HDMI 2.1 sink. The information is
+ * fetched fom additional HFVSDB blocks defined for HDMI 2.1.
+ */
+struct drm_hdmi_vrr_cap {
+	/** @fva: flag for Fast VActive (Quick Frame Transport) support */
+	bool fva;
+
+	/** @mcnmvrr: flag for Negative M VRR support */
+	bool cnmvrr;
+
+	/** @mcinema_vrr: flag for Cinema VRR support */
+	bool cinema_vrr;
+
+	/** @mdelta: flag for limited frame-to-frame compensation support */
+	bool mdelta;
+
+	/**
+	 * @vrr_min : minimum supported variable refresh rate in Hz.
+	 * Valid values only inide 1 - 48 range
+	 */
+	u16 vrr_min;
+
+	/**
+	 * @vrr_max : maximum supported variable refresh rate in Hz (optional).
+	 * Valid values are either 0 (max based on video mode) or >= 100
+	 */
+	u16 vrr_max;
+
+	/**
+	 * @supported: flag for vrr support based on checking for VRRmin and
+	 * VRRmax values having correct values.
+	 */
+	bool supported;
+};
+
+/**
  * struct drm_hdmi_dsc_cap - DSC capabilities of HDMI sink
  *
  * Describes the DSC support provided by HDMI 2.1 sink.
@@ -285,14 +347,11 @@ struct drm_hdmi_dsc_cap {
 	/** @clk_per_slice : max pixel clock in MHz supported per slice */
 	int clk_per_slice;
 
-	/** @max_lanes : dsc max lanes supported for Fixed rate Link training */
-	u8 max_lanes;
-
-	/** @max_frl_rate_per_lane : maximum frl rate with DSC per lane */
-	u8 max_frl_rate_per_lane;
-
 	/** @total_chunk_kbytes: max size of chunks in KBs supported per line*/
 	u8 total_chunk_kbytes;
+
+	/** @frl_cap: FRL under DSC capabilities of the sink */
+	struct drm_hdmi_frl_cap frl_cap;
 };
 
 /**
@@ -324,11 +383,17 @@ struct drm_hdmi_info {
 	/** @y420_dc_modes: bitmap of deep color support index */
 	u8 y420_dc_modes;
 
-	/** @max_frl_rate_per_lane: support fixed rate link */
-	u8 max_frl_rate_per_lane;
+	/** @frl_cap: FRL capabilities of the sink */
+	struct drm_hdmi_frl_cap frl_cap;
 
-	/** @max_lanes: supported by sink */
-	u8 max_lanes;
+	/** @fapa_start_location: flag for the FAPA in blanking support */
+	bool fapa_start_location;
+
+	/** @allm: flag for Auto Low Latency Mode support by sink */
+	bool allm;
+
+	/** @vrr_cap: VRR capabilities of the sink */
+	struct drm_hdmi_vrr_cap vrr_cap;
 
 	/** @dsc_cap: DSC capabilities of the sink */
 	struct drm_hdmi_dsc_cap dsc_cap;
@@ -1099,6 +1164,13 @@ struct drm_connector_state {
 	 * protection. This is most commonly used for HDCP.
 	 */
 	unsigned int content_protection;
+
+	/**
+	 * @allm_mode: Connector property to control the
+	 * HDMI Auto Low Latency Mode trigger setting.
+	 * The %DRM_ALLM_MODE_\* values must match the values.
+	 */
+	enum drm_allm_mode allm_mode;
 
 	/**
 	 * @colorspace: State variable for Connector property to request
@@ -2100,6 +2172,37 @@ struct drm_connector {
 	struct drm_property *vrr_capable_property;
 
 	/**
+	 * @passive_vrr_capable_property: Optional property to help userspace
+	 * query hardware support for passive variable refresh rate on a
+	 * connector. Drivers can add the property to a connector by
+	 * calling drm_connector_attach_passive_vrr_capable_property().
+	 *
+	 * This should be updated only by calling
+	 * drm_connector_set_passive_vrr_capable_property().
+	 */
+	struct drm_property *passive_vrr_capable_property;
+
+	/**
+	 * @allm_capable_property: Optional property to help userspace
+	 * query hardware support for HDMI Auto Low Latency Mode on a connector.
+	 * Drivers can add the property to a connector by calling
+	 * drm_connector_attach_allm_capable_property().
+	 *
+	 * This should be updated only by calling
+	 * drm_connector_set_allm_capable_property().
+	 */
+	struct drm_property *allm_capable_property;
+
+	/**
+	 * @allm_mode_property:
+	 *
+	 * Indicates HDMI Auto Low Latency Mode triggering mode for connector.
+	 * Support for the requested state will depend on driver and hardware
+	 * capabiltiy - lacking support is not treated as failure.
+	 */
+	struct drm_property *allm_mode_property;
+
+	/**
 	 * @colorspace_property: Connector property to set the suitable
 	 * colorspace supported by the sink.
 	 */
@@ -2493,6 +2596,10 @@ int drm_connector_attach_scaling_mode_property(struct drm_connector *connector,
 					       u32 scaling_mode_mask);
 int drm_connector_attach_vrr_capable_property(
 		struct drm_connector *connector);
+int drm_connector_attach_passive_vrr_capable_property(
+		struct drm_connector *connector);
+int drm_connector_attach_allm_capable_property(struct drm_connector *connector);
+int drm_connector_attach_allm_mode_property(struct drm_connector *connector);
 int drm_connector_attach_broadcast_rgb_property(struct drm_connector *connector);
 int drm_connector_attach_colorspace_property(struct drm_connector *connector);
 int drm_connector_attach_hdr_output_metadata_property(struct drm_connector *connector);
@@ -2514,6 +2621,10 @@ int drm_connector_update_edid_property(struct drm_connector *connector,
 void drm_connector_set_link_status_property(struct drm_connector *connector,
 					    uint64_t link_status);
 void drm_connector_set_vrr_capable_property(
+		struct drm_connector *connector, bool capable);
+void drm_connector_set_passive_vrr_capable_property(
+		struct drm_connector *connector, bool capable);
+void drm_connector_set_allm_capable_property(
 		struct drm_connector *connector, bool capable);
 int drm_connector_set_panel_orientation(
 	struct drm_connector *connector,

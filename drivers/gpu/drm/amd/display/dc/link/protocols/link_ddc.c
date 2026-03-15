@@ -596,7 +596,7 @@ void read_scdc_data(struct ddc_service *ddc_service)
 		link_query_ddc_data(ddc_service, slave_address,
 				&offset, sizeof(offset), &scramble_status,
 				sizeof(scramble_status));
-		offset = HDMI_SCDC_STATUS_FLAGS;
+		offset = HDMI_SCDC_STATUS_FLAGS_0;
 		link_query_ddc_data(ddc_service, slave_address,
 				&offset, sizeof(offset), &status_data.byte,
 				sizeof(status_data.byte));

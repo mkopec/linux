@@ -177,6 +177,8 @@ uint32_t dal_cmd_table_helper_encoder_mode_bp_to_atom2(
 		return ATOM_ENCODER_MODE_DVI;
 	case SIGNAL_TYPE_HDMI_TYPE_A:
 		return ATOM_ENCODER_MODE_HDMI;
+	case SIGNAL_TYPE_HDMI_FRL:
+		return ATOM_ENCODER_MODE_HDMI_FRL;
 	case SIGNAL_TYPE_LVDS:
 		return ATOM_ENCODER_MODE_LVDS;
 	case SIGNAL_TYPE_EDP:

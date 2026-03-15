@@ -588,6 +588,63 @@ void dccg401_set_dpstreamclk(
 		dccg401_enable_dpstreamclk(dccg, otg_inst, dp_hpo_inst);
 }
 
+static void dccg401_enable_hdmistreamclk(struct dccg *dccg, int otg_inst, int hdmi_hpo_inst)
+{
+	struct dcn_dccg *dccg_dcn = TO_DCN_DCCG(dccg);
+
+	/* enabled to select one of the DTBCLKs for pipe */
+	switch (hdmi_hpo_inst) {
+	case 0:
+		if (dccg->ctx->dc->debug.root_clock_optimization.bits.hdmistream) {
+			REG_UPDATE(DCCG_GATE_DISABLE_CNTL6,
+					HDMISTREAMCLK0_ROOT_GATE_DISABLE, 1);
+			REG_UPDATE(DCCG_GATE_DISABLE_CNTL3,
+					HDMISTREAMCLK0_GATE_DISABLE, 1);
+		}
+		REG_UPDATE_2(HDMISTREAMCLK_CNTL,
+				HDMISTREAMCLK0_SRC_SEL, otg_inst,
+				HDMISTREAMCLK0_EN, 1);
+		break;
+	default:
+		BREAK_TO_DEBUGGER();
+		return;
+	}
+}
+
+static void dccg401_disable_hdmistreamclk(struct dccg *dccg, int hdmi_hpo_inst)
+{
+	struct dcn_dccg *dccg_dcn = TO_DCN_DCCG(dccg);
+
+	switch (hdmi_hpo_inst) {
+	case 0:
+		REG_UPDATE(HDMISTREAMCLK_CNTL,
+				HDMISTREAMCLK0_EN, 0);
+		if (dccg->ctx->dc->debug.root_clock_optimization.bits.hdmistream) {
+			REG_UPDATE(DCCG_GATE_DISABLE_CNTL6,
+					HDMISTREAMCLK0_ROOT_GATE_DISABLE, 0);
+			REG_UPDATE(DCCG_GATE_DISABLE_CNTL3,
+					HDMISTREAMCLK0_GATE_DISABLE, 0);
+		}
+		break;
+	default:
+		BREAK_TO_DEBUGGER();
+		return;
+	}
+}
+
+void dccg401_set_hdmistreamclk(
+		struct dccg *dccg,
+		enum streamclk_source src,
+		int otg_inst,
+		int hdmi_hpo_inst)
+{
+	/* enabled to select one of the DTBCLKs for pipe */
+	if (src == REFCLK)
+		dccg401_disable_hdmistreamclk(dccg, hdmi_hpo_inst);
+	else
+		dccg401_enable_hdmistreamclk(dccg, otg_inst, hdmi_hpo_inst);
+}
+
 void dccg401_set_dp_dto(
 		struct dccg *dccg,
 		const struct dp_dto_params *params)
@@ -864,6 +921,7 @@ static const struct dccg_funcs dccg401_funcs = {
 	.dccg_init = dccg401_init,
 	.allow_clock_gating = dccg2_allow_clock_gating,
 	.set_dpstreamclk = dccg401_set_dpstreamclk,
+	.set_hdmistreamclk = dccg401_set_hdmistreamclk,
 	.enable_symclk32_se = dccg31_enable_symclk32_se,
 	.disable_symclk32_se = dccg31_disable_symclk32_se,
 	.enable_symclk32_le = dccg401_enable_symclk32_le,

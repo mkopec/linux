@@ -27,6 +27,7 @@ ifdef CONFIG_DRM_AMD_DC_FP
 ###############################################################################
 # DCN30
 ###############################################################################
+HPO_DCN30 += dcn30_hpo_hdmi_stream_encoder.o dcn30_hpo_hdmi_link_encoder.o
 
 AMD_DAL_HPO_DCN30 = $(addprefix $(AMDDALPATH)/dc/hpo/dcn30/,$(HPO_DCN30))
 

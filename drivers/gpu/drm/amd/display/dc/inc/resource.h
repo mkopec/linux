@@ -59,6 +59,8 @@ struct resource_caps {
 	unsigned int num_usb4_dpia; // Total number of USB4 DPIA (DisplayPort Input Adapters).
 	int num_hpo_dp_stream_encoder;
 	int num_hpo_dp_link_encoder;
+	int num_hpo_hdmi_stream_encoder;
+	int num_hpo_hdmi_link_encoder;
 	int num_mpc_3dlut;
 };
 
@@ -90,6 +92,13 @@ struct resource_create_funcs {
 	struct hpo_dp_link_encoder *(*create_hpo_dp_link_encoder)(
 			uint8_t inst,
 			struct dc_context *ctx);
+
+	struct hpo_hdmi_stream_encoder *(*create_hpo_hdmi_stream_encoder)(
+			enum engine_id eng_id, struct dc_context *ctx);
+	struct hpo_hdmi_link_encoder *(*create_hpo_hdmi_link_encoder)(
+			uint8_t inst,
+			struct dc_context *ctx);
+
 	struct dce_hwseq *(*create_hwseq)(
 			struct dc_context *ctx);
 };

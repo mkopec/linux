@@ -151,6 +151,7 @@
 	DCCG_SF(DSCCLK2_DTO_PARAM, DSCCLK2_DTO_MODULO, mask_sh),\
 	DCCG_SF(DSCCLK3_DTO_PARAM, DSCCLK3_DTO_PHASE, mask_sh),\
 	DCCG_SF(DSCCLK3_DTO_PARAM, DSCCLK3_DTO_MODULO, mask_sh),\
+	DCCG_SF(DCCG_GATE_DISABLE_CNTL3, HDMISTREAMCLK0_GATE_DISABLE, mask_sh),\
 	DCCG_SF(DCCG_GATE_DISABLE_CNTL3, SYMCLK32_ROOT_SE0_GATE_DISABLE, mask_sh),\
 	DCCG_SF(DCCG_GATE_DISABLE_CNTL3, SYMCLK32_ROOT_SE1_GATE_DISABLE, mask_sh),\
 	DCCG_SF(DCCG_GATE_DISABLE_CNTL3, SYMCLK32_ROOT_SE2_GATE_DISABLE, mask_sh),\
@@ -207,5 +208,11 @@ void dccg314_set_dpstreamclk(
 		enum streamclk_source src,
 		int otg_inst,
 		int dp_hpo_inst);
+
+void dccg314_set_hdmistreamclk(
+		struct dccg *dccg,
+		enum streamclk_source src,
+		int otg_inst,
+		int hdmi_hpo_inst);
 
 #endif //__DCN314_DCCG_H__

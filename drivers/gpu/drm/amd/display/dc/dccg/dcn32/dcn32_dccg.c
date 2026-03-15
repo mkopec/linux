@@ -310,6 +310,51 @@ static void dccg32_set_dpstreamclk(
 	}
 }
 
+static void dccg32_enable_hdmistreamclk(struct dccg *dccg, int otg_inst, int hdmi_hpo_inst)
+{
+	struct dcn_dccg *dccg_dcn = TO_DCN_DCCG(dccg);
+
+	/* enabled to select one of the DTBCLKs for pipe */
+	switch (hdmi_hpo_inst) {
+	case 0:
+		REG_UPDATE_2(HDMISTREAMCLK_CNTL,
+				HDMISTREAMCLK0_SRC_SEL, otg_inst,
+				HDMISTREAMCLK0_EN, 1);
+		break;
+	default:
+		BREAK_TO_DEBUGGER();
+		return;
+	}
+}
+
+static void dccg32_disable_hdmistreamclk(struct dccg *dccg, int hdmi_hpo_inst)
+{
+	struct dcn_dccg *dccg_dcn = TO_DCN_DCCG(dccg);
+
+	switch (hdmi_hpo_inst) {
+	case 0:
+		REG_UPDATE(HDMISTREAMCLK_CNTL,
+				HDMISTREAMCLK0_EN, 0);
+		break;
+	default:
+		BREAK_TO_DEBUGGER();
+		return;
+	}
+}
+
+static void dccg32_set_hdmistreamclk(
+		struct dccg *dccg,
+		enum streamclk_source src,
+		int otg_inst,
+		int hdmi_hpo_inst)
+{
+	/* enabled to select one of the DTBCLKs for pipe */
+	if (src == REFCLK)
+		dccg32_disable_hdmistreamclk(dccg, hdmi_hpo_inst);
+	else
+		dccg32_enable_hdmistreamclk(dccg, otg_inst, hdmi_hpo_inst);
+}
+
 static void dccg32_otg_add_pixel(struct dccg *dccg,
 		uint32_t otg_inst)
 {
@@ -333,6 +378,7 @@ static const struct dccg_funcs dccg32_funcs = {
 	.get_dccg_ref_freq = dccg32_get_dccg_ref_freq,
 	.dccg_init = dccg31_init,
 	.set_dpstreamclk = dccg32_set_dpstreamclk,
+	.set_hdmistreamclk = dccg32_set_hdmistreamclk,
 	.enable_symclk32_se = dccg31_enable_symclk32_se,
 	.disable_symclk32_se = dccg31_disable_symclk32_se,
 	.enable_symclk32_le = dccg31_enable_symclk32_le,

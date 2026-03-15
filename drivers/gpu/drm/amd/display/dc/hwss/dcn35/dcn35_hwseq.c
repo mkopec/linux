@@ -918,7 +918,7 @@ void dcn35_disable_plane(struct dc *dc, struct dc_state *state, struct pipe_ctx 
 void dcn35_calc_blocks_to_gate(struct dc *dc, struct dc_state *context,
 	struct pg_block_update *update_state)
 {
-	bool hpo_frl_stream_enc_acquired = false;
+	bool hpo_frl_stream_enc_acquired = true; // HACK
 	bool hpo_dp_stream_enc_acquired = false;
 	int i = 0, j = 0;
 	int edp_num = 0;

@@ -64,7 +64,8 @@ struct dp_hdmi_dongle_signature_data {
 #define HDMI_SCDC_CONFIG_0 0x30
 #define HDMI_SCDC_CONFIG_1 0x31
 #define HDMI_SCDC_SOURCE_TEST_REQ 0x35
-#define HDMI_SCDC_STATUS_FLAGS 0x40
+#define HDMI_SCDC_STATUS_FLAGS_0 0x40
+#define HDMI_SCDC_STATUS_FLAGS_1 0x41
 #define HDMI_SCDC_ERR_DETECT 0x50
 #define HDMI_SCDC_TEST_CONFIG 0xC0
 

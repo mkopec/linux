@@ -48,9 +48,12 @@
 #include "link/hwss/link_hwss_virtual.h"
 #include "link/hwss/link_hwss_dio.h"
 #include "link/hwss/link_hwss_dpia.h"
+#include "link/hwss/link_hwss_hpo_frl.h"
 #include "link/hwss/link_hwss_hpo_dp.h"
 #include "link/hwss/link_hwss_dio_fixed_vs_pe_retimer.h"
 #include "link/hwss/link_hwss_hpo_fixed_vs_pe_retimer_dp.h"
+
+#include "link/protocols/link_frl_training.h"
 
 #if defined(CONFIG_DRM_AMD_DC_SI)
 #include "dce60/dce60_resource.h"
@@ -508,6 +511,27 @@ bool resource_construct(
 			if (pool->hpo_dp_link_enc[i] == NULL)
 				DC_ERR("DC: failed to create HPO DP link encoder!\n");
 			pool->hpo_dp_link_enc_count++;
+		}
+	}
+
+	pool->hpo_hdmi_stream_enc_count = 0;
+	if (create_funcs->create_hpo_hdmi_stream_encoder) {
+		for (i = 0; i < caps->num_hpo_hdmi_stream_encoder; i++) {
+			pool->hpo_hdmi_stream_enc[i] = create_funcs->create_hpo_hdmi_stream_encoder(i+ENGINE_ID_HPO_0, ctx);
+			if (pool->hpo_hdmi_stream_enc[i] == NULL)
+				DC_ERR("DC: failed to create HPO HDMI stream encoder!\n");
+			pool->hpo_hdmi_stream_enc_count++;
+
+		}
+	}
+
+	pool->hpo_hdmi_link_enc_count = 0;
+	if (create_funcs->create_hpo_hdmi_link_encoder) {
+		for (i = 0; i < caps->num_hpo_hdmi_link_encoder; i++) {
+			pool->hpo_hdmi_link_enc[i] = create_funcs->create_hpo_hdmi_link_encoder(i, ctx);
+			if (pool->hpo_hdmi_link_enc[i] == NULL)
+				DC_ERR("DC: failed to create HPO HDMI link encoder!\n");
+			pool->hpo_hdmi_link_enc_count++;
 		}
 	}
 
@@ -4033,6 +4057,15 @@ enum dc_status resource_map_pool_resources(
 		}
 	}
 
+	if (dc_is_hdmi_frl_signal(stream->signal)) {
+		if (!hdmi_decide_link_settings(stream, pipe_ctx))
+			return DC_FAIL_FRL_LINK_BANDWIDTH;
+
+		/* Only one pair of encoders on all HW so far. */
+		pipe_ctx->stream_res.hpo_hdmi_stream_enc = pool->hpo_hdmi_stream_enc[0];
+		pipe_ctx->link_res.hpo_hdmi_link_enc = pool->hpo_hdmi_link_enc[0];
+	}
+
 	if (dc->config.unify_link_enc_assignment && is_dio_encoder)
 		if (!add_dio_link_enc_to_ctx(dc, context, pool, pipe_ctx, stream))
 			return DC_NO_LINK_ENC_RESOURCE;
@@ -4659,7 +4692,7 @@ static void set_avi_info_frame(
 		vic = 0;
 	format = stream->timing.timing_3d_format;
 	/*todo, add 3DStereo support*/
-	if (format != TIMING_3D_FORMAT_NONE) {
+	if (format != TIMING_3D_FORMAT_NONE || stream->hdmi_allm_active) {
 		// Based on HDMI specs hdmi vic needs to be converted to cea vic when 3D is enabled
 		switch (pipe_ctx->stream->timing.hdmi_vic) {
 		case 1:
@@ -5484,6 +5517,8 @@ const struct link_hwss *get_link_hwss(const struct dc_link *link,
 		 */
 		return (requires_fixed_vs_pe_retimer_hpo_link_hwss(link) ?
 				get_hpo_fixed_vs_pe_retimer_dp_link_hwss() : get_hpo_dp_link_hwss());
+	else if (can_use_hpo_hdmi_frl_link_hwss(link, link_res))
+		return get_hpo_hdmi_frl_link_hwss();
 	else if (can_use_dpia_link_hwss(link, link_res))
 		return get_dpia_link_hwss();
 	else if (can_use_dio_link_hwss(link, link_res))
@@ -5711,5 +5746,5 @@ bool resource_is_hpo_acquired(struct dc_state *context)
 		}
 	}
 
-	return false;
+	return true;
 }

@@ -1530,6 +1530,9 @@ struct dc *dc_create(const struct dc_init_data *init_params)
 	}
 
 	dc->dcn_reg_offsets = init_params->dcn_reg_offsets;
+	DC_LOG_ERROR("DCN reg offset 1: 0x%x\n", init_params->dcn_reg_offsets[1]);
+	DC_LOG_ERROR("DCN reg offset 2: 0x%x\n", init_params->dcn_reg_offsets[2]);
+	DC_LOG_ERROR("DCN reg offset 3: 0x%x\n", init_params->dcn_reg_offsets[3]);
 	dc->nbio_reg_offsets = init_params->nbio_reg_offsets;
 	dc->clk_reg_offsets = init_params->clk_reg_offsets;
 
@@ -3292,6 +3295,9 @@ static void copy_stream_update_to_stream(struct dc *dc,
 
 	if (update->vrr_active_fixed)
 		stream->vrr_active_fixed = *update->vrr_active_fixed;
+
+	if (update->hdmi_allm_active)
+		stream->hdmi_allm_active = *update->hdmi_allm_active;
 
 	if (update->crtc_timing_adjust) {
 		if (stream->adjust.v_total_min != update->crtc_timing_adjust->v_total_min ||

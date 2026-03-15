@@ -186,6 +186,41 @@ struct dc_panel_patch {
 };
 
 /**
+ * struct dc_hdmi_frl_caps - HDMI FRL Capabilities read from EDID.
+ */
+struct dc_hdmi_frl_caps {
+	/* raw max_rate field */
+	uint8_t max_rate;
+
+	/* max supported data rate per lane in Gbps */
+	uint8_t max_rate_per_lane;
+
+	/* max supported FRL lanes by sink */
+	uint8_t max_lanes;
+};
+
+/**
+ * struct dc_hdmi_dsc_caps - HDMI DSC Capabilities read from EDID.
+ */
+struct dc_hdmi_dsc_caps {
+	/* Support DSC v1.2 */
+	bool v1p2;
+
+	bool all_bpp;
+	bool native_420;
+
+	uint8_t max_bpc;
+	uint8_t total_chunk_kbytes;
+	uint8_t max_slices;
+
+	/* max supported pixel clock per slice in MHz */
+	uint16_t max_clk;
+
+	/* Alternative FRL caps to use with DSC */
+	struct dc_hdmi_frl_caps frl;
+};
+
+/**
  * struct dc_edid_caps - Capabilities read from EDID.
  * @analog: Whether the monitor is analog. Used by DVI-I handling.
  */
@@ -210,8 +245,15 @@ struct dc_edid_caps {
 
 	uint32_t max_tmds_clk_mhz;
 
-	/*HDMI 2.0 caps*/
+	/* HDMI 2.0 caps */
 	bool lte_340mcsc_scramble;
+
+	/* HDMI 2.1 caps */
+	struct dc_hdmi_frl_caps frl_caps;
+	struct dc_hdmi_dsc_caps dsc_caps;
+	bool allm;
+	bool fva;
+	bool hdmi_vrr;
 
 	bool edid_hdmi;
 	bool hdr_supported;

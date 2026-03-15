@@ -3904,7 +3904,7 @@ void drm_dp_pcon_hdmi_frl_link_error_count(struct drm_dp_aux *aux,
 	int i, num_error;
 	struct drm_hdmi_info *hdmi = &connector->display_info.hdmi;
 
-	for (i = 0; i < hdmi->max_lanes; i++) {
+	for (i = 0; i < hdmi->frl_cap.max_lanes; i++) {
 		if (drm_dp_dpcd_read_byte(aux, DP_PCON_HDMI_ERROR_STATUS_LN0 + i, &buf) < 0)
 			return;
 

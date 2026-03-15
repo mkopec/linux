@@ -300,6 +300,15 @@ struct drm_crtc_state {
 	bool vrr_enabled;
 
 	/**
+	 * @passive_vrr_disabled:
+	 *
+	 * Indicates if variable refresh rate on desktop should be enabled for
+	 * the CRTC. Support for the requested state will depend on driver and
+	 * hardware capabiltiy - lacking support is not treated as failure.
+	 */
+	bool passive_vrr_disabled;
+
+	/**
 	 * @self_refresh_active:
 	 *
 	 * Used by the self refresh helpers to denote when a self refresh

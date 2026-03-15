@@ -239,6 +239,12 @@ struct dccg_funcs {
 			int otg_inst,
 			int dp_hpo_inst);
 
+	void (*set_hdmistreamclk)(
+			struct dccg *dccg,
+			enum streamclk_source src,
+			int otg_inst,
+			int hdmi_hpo_inst);
+
 	void (*enable_symclk32_se)(
 			struct dccg *dccg,
 			int hpo_se_inst,

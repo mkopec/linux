@@ -137,7 +137,12 @@ enum dc_edid_status dm_helpers_parse_edid_caps(
 				  edid_caps->display_name,
 				  AUDIO_INFO_DISPLAY_NAME_SIZE_IN_CHARS);
 
-	edid_caps->edid_hdmi = connector->display_info.is_hdmi;
+	if (connector->display_info.is_hdmi) {
+		edid_caps->edid_hdmi = true;
+		edid_caps->allm = connector->display_info.hdmi.allm;
+		edid_caps->fva = connector->display_info.hdmi.vrr_cap.fva;
+		edid_caps->hdmi_vrr = connector->display_info.hdmi.vrr_cap.supported;
+	}
 
 	if (edid_caps->edid_hdmi)
 		populate_hdmi_info_from_connector(&connector->display_info.hdmi, edid_caps);
@@ -995,7 +1000,32 @@ dm_helpers_read_acpi_edid(struct amdgpu_dm_connector *aconnector)
 
 void populate_hdmi_info_from_connector(struct drm_hdmi_info *hdmi, struct dc_edid_caps *edid_caps)
 {
+	struct dc_hdmi_dsc_caps *dsc = &edid_caps->dsc_caps;
+
 	edid_caps->scdc_present = hdmi->scdc.supported;
+
+	/* FRL */
+	if (hdmi->frl_cap.max_rate == 0)
+		return;
+
+	edid_caps->frl_caps.max_rate = hdmi->frl_cap.max_rate;
+	edid_caps->frl_caps.max_lanes = hdmi->frl_cap.max_lanes;
+	edid_caps->frl_caps.max_rate_per_lane = hdmi->frl_cap.max_rate_per_lane;
+
+	/* DSC */
+	if (hdmi->dsc_cap.v_1p2 != true)
+		return;
+
+	dsc->v1p2 = hdmi->dsc_cap.v_1p2;
+	dsc->all_bpp = hdmi->dsc_cap.all_bpp;
+	dsc->native_420 = hdmi->dsc_cap.native_420;
+	dsc->max_bpc = hdmi->dsc_cap.bpc_supported;
+	dsc->max_slices = hdmi->dsc_cap.max_slices;
+	dsc->total_chunk_kbytes = hdmi->dsc_cap.total_chunk_kbytes;
+
+	dsc->frl.max_rate = hdmi->dsc_cap.frl_cap.max_rate;
+	dsc->frl.max_lanes = hdmi->dsc_cap.frl_cap.max_lanes;
+	dsc->frl.max_rate_per_lane = hdmi->dsc_cap.frl_cap.max_rate_per_lane;
 }
 
 enum dc_edid_status dm_helpers_read_local_edid(
@@ -1389,40 +1419,32 @@ void dm_helpers_dp_mst_update_branch_bandwidth(
 	// TODO
 }
 
-static bool dm_is_freesync_pcon_whitelist(const uint32_t branch_dev_id)
+bool dm_helpers_is_vrr_pcon_allowed(const struct dc_link *link, const struct drm_device *dev)
 {
-	bool ret_val = false;
+	if (link->dpcd_caps.dongle_type != DISPLAY_DONGLE_DP_HDMI_CONVERTER)
+		return false;
 
-	switch (branch_dev_id) {
+	if (!link->dpcd_caps.allow_invalid_MSA_timing_param)
+		return false;
+
+	if (!link->dpcd_caps.adaptive_sync_caps.dp_adap_sync_caps.bits.ADAPTIVE_SYNC_SDP_SUPPORT)
+		return false;
+
+	switch (link->dpcd_caps.branch_dev_id) {
 	case DP_BRANCH_DEVICE_ID_0060AD:
 	case DP_BRANCH_DEVICE_ID_00E04C:
 	case DP_BRANCH_DEVICE_ID_90CC24:
-		ret_val = true;
-		break;
-	default:
-		break;
+	case DP_BRANCH_DEVICE_ID_2B02F0:
+		return true;
 	}
 
-	return ret_val;
-}
-
-enum adaptive_sync_type dm_get_adaptive_sync_support_type(struct dc_link *link)
-{
-	struct dpcd_caps *dpcd_caps = &link->dpcd_caps;
-	enum adaptive_sync_type as_type = ADAPTIVE_SYNC_TYPE_NONE;
-
-	switch (dpcd_caps->dongle_type) {
-	case DISPLAY_DONGLE_DP_HDMI_CONVERTER:
-		if (dpcd_caps->adaptive_sync_caps.dp_adap_sync_caps.bits.ADAPTIVE_SYNC_SDP_SUPPORT == true &&
-			dpcd_caps->allow_invalid_MSA_timing_param == true &&
-			dm_is_freesync_pcon_whitelist(dpcd_caps->branch_dev_id))
-			as_type = FREESYNC_TYPE_PCON_IN_WHITELIST;
-		break;
-	default:
-		break;
+	if (link->dc->debug.override_pcon_vrr_id_check) {
+		drm_info(dev, "Overriding VRR PCON check for ID: 0x%06x\n",
+			 link->dpcd_caps.branch_dev_id);
+		return true;
 	}
 
-	return as_type;
+	return false;
 }
 
 bool dm_helpers_is_fullscreen(struct dc_context *ctx, struct dc_stream_state *stream)

@@ -201,6 +201,11 @@ void dccg401_set_dpstreamclk(
 		enum streamclk_source src,
 		int otg_inst,
 		int dp_hpo_inst);
+void dccg401_set_hdmistreamclk(
+		struct dccg *dccg,
+		enum streamclk_source src,
+		int otg_inst,
+		int hdmi_hpo_inst);
 void dccg401_enable_symclk32_le(
 		struct dccg *dccg,
 		int hpo_le_inst,

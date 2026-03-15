@@ -697,6 +697,12 @@ struct drm_mode_config {
 	 * whether variable refresh rate should be enabled on the CRTC.
 	 */
 	struct drm_property *prop_vrr_enabled;
+	/**
+	 * @prop_passive_vrr_disabled: Default atomic CRTC property to indicate
+	 * whether passive variable refresh rate should be disabled
+	 * on the CRTC.
+	 */
+	struct drm_property *prop_passive_vrr_disabled;
 
 	/**
 	 * @dvi_i_subconnector_property: Optional DVI-I property to

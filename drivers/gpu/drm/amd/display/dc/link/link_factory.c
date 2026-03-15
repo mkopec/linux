@@ -43,6 +43,7 @@
 #include "protocols/link_edp_panel_control.h"
 #include "protocols/link_dp_panel_replay.h"
 #include "protocols/link_hpd.h"
+#include "protocols/link_frl_training.h"
 #include "gpio_service_interface.h"
 #include "atomfirmware.h"
 
@@ -259,6 +260,11 @@ static void construct_link_service_dp_cts(struct link_service *link_srv)
 /* link dp trace implements tracing interfaces for tracking major dp sequences
  * including execution status and timestamps
  */
+static void construct_link_service_hdmi_frl(struct link_service *link_srv)
+{
+	link_srv->hdmi_frl_disable = dc_link_disable_frl;
+}
+
 static void construct_link_service_dp_trace(struct link_service *link_srv)
 {
 	link_srv->dp_trace_is_initialized = dp_trace_is_initialized;
@@ -298,6 +304,7 @@ static void construct_link_service(struct link_service *link_srv)
 	construct_link_service_dp_panel_replay(link_srv);
 	construct_link_service_dp_cts(link_srv);
 	construct_link_service_dp_trace(link_srv);
+	construct_link_service_hdmi_frl(link_srv);
 }
 
 struct link_service *link_create_link_service(void)
