@@ -347,5 +347,8 @@ struct link_service {
 	uint64_t (*dp_trace_get_edp_poweroff_timestamp)(struct dc_link *link);
 	void (*dp_trace_source_sequence)(
 			struct dc_link *link, uint8_t dp_test_mode);
+
+	/*************************** HDMI FRL *********************************/
+	void (*hdmi_frl_disable)(struct dc_link *link);
 };
 #endif /* __DC_LINK_HPD_H__ */

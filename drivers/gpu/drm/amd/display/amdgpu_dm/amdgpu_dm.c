@@ -3240,6 +3240,23 @@ static int dm_suspend(struct amdgpu_ip_block *ip_block)
 
 	hpd_rx_irq_work_suspend(dm);
 
+	/* On a full machine shutdown (not suspend/resume), notify any connected
+	 * HDMI FRL sinks to stop expecting an FRL signal. This allows the sink
+	 * to fall back to TMDS immediately rather than waiting for a timeout.
+	 * Skip during suspend/resume — we will retrain FRL on resume anyway.
+	 */
+	if (adev->mp1_state == PP_MP1_STATE_UNLOAD) {
+		int i;
+
+		for (i = 0; i < dm->dc->link_count; i++) {
+			struct dc_link *link = dm->dc->links[i];
+
+			if (dc_is_hdmi_frl_signal(link->connector_signal) &&
+			    link->local_sink)
+				dm->dc->link_srv->hdmi_frl_disable(link);
+		}
+	}
+
 	dc_set_power_state(dm->dc, DC_ACPI_CM_POWER_STATE_D3);
 
 	if (dm->dc->caps.ips_support && adev->in_s0ix)
