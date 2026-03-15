@@ -61,8 +61,9 @@ bool dc_link_perform_frl_training(struct dc_link *link,
 	uint8_t frl_rate = link->cur_link_settings.frl_rate;
 	uint8_t sink_version;
 	uint8_t update;
-	uint8_t status;
+	uint8_t status = 0;
 	uint16_t ltp_req;
+	uint8_t patterns[FRL_MAX_LANES] = {0, 0, 0, 0};
 	uint8_t write_buffer[2];
 	int poll;
 	int lane;
@@ -202,21 +203,11 @@ bool dc_link_perform_frl_training(struct dc_link *link,
 			}
 		}
 
-		/* Program requested training patterns */
-		pr_err("FRL DEBUG: programming training patterns\n");
-		enc->funcs->set_training_patterns(enc,
-						  ((ltp_req >> 0) & 0xF) - 1,
-						  ((ltp_req >> 4) & 0xF) - 1,
-						  ((ltp_req >> 8) & 0xF) - 1,
-						  ((ltp_req >> 12) & 0xF) - 1);
-
-		/* Detect LOWER_RATE / NEXT_FFE */
+		/* Check for special LTP requests before programming patterns */
 		for (lane = 0; lane < lane_count; lane++) {
 			uint8_t ltp = (ltp_req >> (lane * 4)) & 0xF;
 
 			if (ltp == HDMI_LTP_LOWER_RATE) {
-				pr_err("FRL DEBUG: lane %d requested LOWER_RATE\n",
-				       lane);
 				DC_LOG_ERROR(
 					"FRL: sink requested lower rate (unsupported)\n");
 				goto fail;
@@ -227,6 +218,19 @@ bool dc_link_perform_frl_training(struct dc_link *link,
 				       lane);
 			}
 		}
+
+		/* Update per-lane patterns; preserve current pattern for passing lanes */
+		for (lane = 0; lane < lane_count; lane++) {
+			uint8_t ltp = (ltp_req >> (lane * 4)) & 0xF;
+
+			if (ltp != HDMI_LTP_PASS && ltp != HDMI_LTP_NEXT_FFE)
+				patterns[lane] = ltp - 1;
+		}
+
+		pr_err("FRL DEBUG: programming training patterns\n");
+		enc->funcs->set_training_patterns(enc,
+						  patterns[0], patterns[1],
+						  patterns[2], patterns[3]);
 
 		msleep(FRL_POLL_DELAY_MS);
 	}
