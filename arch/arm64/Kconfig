@@ -2543,6 +2543,22 @@ config EFI
 	  allow the kernel to be booted as an EFI application. This
 	  is only useful on systems that have UEFI firmware.
 
+config ARM64_DRTM
+	bool "Arm Dynamic Root of Trust for Measurement support"
+	depends on EFI
+	select CRYPTO
+	select CRYPTO_SHA256
+	select CRYPTO_SHA512
+	select EFI_STUB_DRTM
+	help
+	  Support launching Linux as a Dynamically Launched Measured
+	  Environment (DLME) using Arm's DEN0113 DRTM specification. Requires
+	  booting through the EFI stub. The drtm= kernel command line option
+	  enables or disables the launch at boot.
+
+	  If unsure, say N. This option is EXPERIMENTAL and does not yet provide
+	  security.
+
 config COMPRESSED_INSTALL
 	bool "Install compressed image by default"
 	help
