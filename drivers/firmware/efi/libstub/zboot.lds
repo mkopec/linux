@@ -38,7 +38,7 @@ SECTIONS
 
 	.data : ALIGN(4096) {
 		_data = .;
-		*(.data* .init.data*)
+		*(.data* .init.data* .init.efidata* .init.efibss*)
 		_edata = ALIGN(512);
 		. = _edata;
 	}
