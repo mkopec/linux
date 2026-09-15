@@ -1078,6 +1078,42 @@ efi_status_t check_platform_features(void);
 
 void *get_efi_config_table(efi_guid_t guid);
 
+enum efi_drtm_policy {
+	EFI_DRTM_OFF,
+	EFI_DRTM_AUTO,
+	EFI_DRTM_ENFORCE,
+};
+
+#ifdef CONFIG_EFI_STUB_DRTM
+extern enum efi_drtm_policy efi_drtm_policy;
+efi_status_t efi_drtm_prepare(void);
+unsigned long efi_drtm_get_extra_size(void);
+efi_status_t efi_drtm_prepare_launch(unsigned long image_base,
+				     unsigned long fdt_addr);
+void efi_drtm_launch(void);
+#else
+enum {efi_drtm_policy = EFI_DRTM_OFF};
+static inline efi_status_t efi_drtm_prepare(void)
+{
+	return EFI_SUCCESS;
+}
+
+static inline unsigned long efi_drtm_get_extra_size(void)
+{
+	return 0;
+}
+
+static inline efi_status_t
+efi_drtm_prepare_launch(unsigned long image_base, unsigned long fdt_addr)
+{
+	return EFI_SUCCESS;
+}
+
+static inline void efi_drtm_launch(void)
+{
+}
+#endif
+
 /* NOTE: These functions do not print a trailing newline after the string */
 void efi_char16_puts(efi_char16_t *);
 void efi_puts(const char *str);

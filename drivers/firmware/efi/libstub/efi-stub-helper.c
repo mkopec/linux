@@ -27,6 +27,37 @@ static bool efi_disable_pci_dma = IS_ENABLED(CONFIG_EFI_DISABLE_PCI_DMA);
 
 int efi_mem_encrypt;
 
+#ifdef CONFIG_EFI_STUB_DRTM
+enum efi_drtm_policy efi_drtm_policy =
+	IS_ENABLED(CONFIG_EFI_STUB_DRTM_DEFAULT_ENFORCE) ? EFI_DRTM_ENFORCE :
+	IS_ENABLED(CONFIG_EFI_STUB_DRTM_DEFAULT_AUTO) ? EFI_DRTM_AUTO :
+	EFI_DRTM_OFF;
+
+static void efi_drtm_parse_options(char *options)
+{
+	char *keyword;
+
+	while (options) {
+		keyword = options;
+		while (*options && *options != ',')
+			options++;
+		if (*options)
+			*options++ = '\0';
+		else
+			options = NULL;
+
+		if (!strcmp(keyword, "off"))
+			efi_drtm_policy = EFI_DRTM_OFF;
+		else if (!strcmp(keyword, "auto"))
+			efi_drtm_policy = EFI_DRTM_AUTO;
+		else if (!strcmp(keyword, "enforce"))
+			efi_drtm_policy = EFI_DRTM_ENFORCE;
+	}
+}
+#else
+static void efi_drtm_parse_options(char *options) {}
+#endif
+
 bool __pure __efi_soft_reserve_enabled(void)
 {
 	return !efi_nosoftreserve;
@@ -89,6 +120,9 @@ efi_status_t efi_parse_options(char const *cmdline)
 				efi_mem_encrypt = 1;
 			else if (parse_option_str(val, "off"))
 				efi_mem_encrypt = -1;
+		} else if (IS_ENABLED(CONFIG_EFI_STUB_DRTM) &&
+			   !strcmp(param, "drtm") && val) {
+			efi_drtm_parse_options(val);
 		} else if (!strcmp(param, "efi") && val) {
 			efi_nochunk = parse_option_str(val, "nochunk");
 			efi_novamap |= parse_option_str(val, "novamap");

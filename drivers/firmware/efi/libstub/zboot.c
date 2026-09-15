@@ -35,7 +35,7 @@ asmlinkage efi_status_t __efiapi
 efi_zboot_entry(efi_handle_t handle, efi_system_table_t *systab)
 {
 	char *cmdline_ptr __free(efi_pool) = NULL;
-	unsigned long image_base, alloc_size;
+	unsigned long image_base, image_size, alloc_size;
 	efi_loaded_image_t *image;
 	efi_status_t status;
 
@@ -52,11 +52,16 @@ efi_zboot_entry(efi_handle_t handle, efi_system_table_t *systab)
 	if (status != EFI_SUCCESS)
 		return status;
 
-	efi_info("Decompressing Linux Kernel...\n");
-
-	status = efi_zboot_decompress_init(&alloc_size);
+	status = efi_drtm_prepare();
 	if (status != EFI_SUCCESS)
 		return status;
+
+	efi_info("Decompressing Linux Kernel...\n");
+
+	status = efi_zboot_decompress_init(&image_size);
+	if (status != EFI_SUCCESS)
+		return status;
+	alloc_size = image_size + efi_drtm_get_extra_size();
 
 	 // If the architecture has a preferred address for the image,
 	 // try that first.
@@ -92,8 +97,12 @@ efi_zboot_entry(efi_handle_t handle, efi_system_table_t *systab)
 	}
 
 	// Decompress the payload into the newly allocated buffer
-	status = efi_zboot_decompress((void *)image_base, alloc_size);
+	status = efi_zboot_decompress((void *)image_base, image_size);
 	if (status == EFI_SUCCESS) {
+		/*
+		 * Have to sync the entire allocation because the sync also
+		 * remaps and changes the permissions.
+		 */
 		efi_cache_sync_image(image_base, alloc_size);
 		status = efi_stub_common(handle, image, image_base, cmdline_ptr);
 	}

@@ -1376,6 +1376,18 @@ Kernel parameters
 			data set with no connector name will be used for
 			any connectors not explicitly specified.
 
+	drtm=		[EFI,EARLY]
+			Format: { "off" | "auto" | "enforce" }
+			Control the EFI stub Dynamic Root of Trust for
+			Measurement (DRTM) launch policy.
+			off: do not attempt a DRTM launch.
+			auto: attempt a DRTM launch when supported, but fall
+			back to a normal boot if preparation or launch fails.
+			enforce: require a DRTM launch and refuse to fall back
+			to a normal boot if preparation or launch fails.
+			The default is selected by the EFI_STUB_DRTM_DEFAULT_*
+			configuration options.
+
 	dscc4.setup=	[NET]
 
 	dt_cpu_ftrs=	[PPC,EARLY]

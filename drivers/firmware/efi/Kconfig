@@ -75,6 +75,36 @@ config EFI_GENERIC_STUB
 config EFI_STUB_IMAGE_INFO
 	bool
 
+config EFI_STUB_DRTM
+	bool
+
+choice
+	prompt "Default DRTM launch policy"
+	depends on EFI_STUB_DRTM
+	default EFI_STUB_DRTM_DEFAULT_OFF
+	help
+	  Select the DRTM policy used when no drtm= option is present on the
+	  kernel command line. The command-line option overrides this default.
+
+config EFI_STUB_DRTM_DEFAULT_OFF
+	bool "Off"
+	help
+	  Do not attempt a DRTM launch unless it is requested explicitly.
+
+config EFI_STUB_DRTM_DEFAULT_AUTO
+	bool "Automatic with fallback"
+	help
+	  Attempt a DRTM launch when the firmware supports it, but fall back to
+	  normal boot if preparation or a returnable launch attempt fails.
+
+config EFI_STUB_DRTM_DEFAULT_ENFORCE
+	bool "Enforce"
+	help
+	  Require a DRTM launch and refuse normal-boot fallback if preparation
+	  or a returnable launch attempt fails.
+
+endchoice
+
 config EFI_ZBOOT
 	bool "Enable the generic EFI decompressor"
 	depends on EFI_GENERIC_STUB && !ARM
