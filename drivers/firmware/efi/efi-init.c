@@ -61,7 +61,7 @@ extern __weak const efi_config_table_type_t efi_arch_tables[];
  * it even without EFI, everything else can get them from here.
  */
 #if !defined(CONFIG_X86) && (defined(CONFIG_SYSFB) || defined(CONFIG_EFI_EARLYCON) || defined(CONFIG_FIRMWARE_EDID))
-struct sysfb_display_info sysfb_primary_display __section(".data");
+struct sysfb_display_info sysfb_primary_display __efi_data_handoff;
 EXPORT_SYMBOL_GPL(sysfb_primary_display);
 #endif
 

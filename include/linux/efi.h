@@ -29,6 +29,18 @@
 
 struct screen_info;
 
+/*
+ * Data the stub wants to pass to the kernel must not land in .bss so it doesn't
+ * get zero'd during early boot, and when DRTM is enabled must not land in the
+ * measured sections. The offset of such data can be passed to both EFI stubs
+ * using a mechanism like struct efi_image_info.
+ */
+#ifdef CONFIG_EFI_STUB_DRTM
+#define __efi_data_handoff	__section(".unmeasured.data")
+#else
+#define __efi_data_handoff	__section(".data")
+#endif
+
 #define EFI_SUCCESS		0
 #define EFI_LOAD_ERROR		( 1 | (1UL << (BITS_PER_LONG-1)))
 #define EFI_INVALID_PARAMETER	( 2 | (1UL << (BITS_PER_LONG-1)))
