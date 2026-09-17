@@ -38,7 +38,6 @@ efi_status_t handle_kernel_image(unsigned long *image_addr,
 	info = efi_get_image_info((unsigned long)_text);
 	kernel_codesize = info->code_size;
 	kernel_memsize = kernel_size + (_end - _edata);
-	*reserve_size = kernel_memsize;
 	*image_addr = (unsigned long)_text;
 
 	return efi_kaslr_relocate_kernel(image_addr, reserve_addr, reserve_size,
