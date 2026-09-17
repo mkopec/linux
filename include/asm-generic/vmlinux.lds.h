@@ -83,6 +83,44 @@
 #define RO_EXCEPTION_TABLE
 #endif
 
+/*
+ * Architecture specific information made available to the EFI stub, see
+ * CONFIG_EFI_STUB_IMAGE_INFO. The architecture describes the data with a
+ * struct efi_image_info in its asm/image.h and emits the matching bytes here
+ * through contents, using linker expressions the compiler cannot compute.
+ *
+ * Place in the same section as INIT_DATA.
+ *
+ * The architecture must also define EFI_IMAGE_INFO_SIZE to sizeof(struct
+ * efi_image_info), and that definition has to be visible to the linker script
+ * before this macro is used. Keeping the two in sync is checked by a
+ * static_assert() next to the struct and by the ASSERT() below.
+ *
+ * The struct's offset from _text is emitted as a u64 at
+ * __efi_image_info_offset. The architecture aliases this location to
+ * __efistub_efi_image_info_offset for the embedded stub. The absolute
+ * _efi_image_info_offset_value contains the offset itself; Makefile.zboot
+ * extracts it with nm and zboot.lds emits it for the compressed image.
+ */
+#ifdef CONFIG_EFI_STUB_IMAGE_INFO
+#define EFI_IMAGE_INFO_ENTRY(value) QUAD(value)
+#define EFI_IMAGE_INFO_OFFSET(symbol) EFI_IMAGE_INFO_ENTRY(symbol - _text)
+
+#define EFI_IMAGE_INFO(contents)                                               \
+	. = ALIGN(8);                                                          \
+	__efi_image_info = .;                                                  \
+	contents;                                                              \
+	__efi_image_info_end = .;                                              \
+	ASSERT(__efi_image_info_end - __efi_image_info == EFI_IMAGE_INFO_SIZE, \
+	       "invalid EFI image-info size");                                 \
+	_efi_image_info_offset_value = ABSOLUTE(__efi_image_info - _text);     \
+	. = ALIGN(8);                                                          \
+	__efi_image_info_offset = .;                                           \
+	QUAD(_efi_image_info_offset_value);
+#else
+#define EFI_IMAGE_INFO(contents)
+#endif
+
 /* Align . function alignment. */
 #define ALIGN_FUNCTION()  . = ALIGN(CONFIG_FUNCTION_ALIGNMENT)
 

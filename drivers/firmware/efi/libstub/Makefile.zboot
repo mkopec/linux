@@ -26,8 +26,17 @@ zboot-size-len-$(CONFIG_KERNEL_ZSTD)	:= 4
 $(obj)/vmlinuz: $(obj)/vmlinux.bin FORCE
 	$(call if_changed,$(zboot-method-y))
 
+# Architectures may expose a private image information structure to the EFI
+# stub. Inject its offset into the zboot executable so it remains available
+# after the payload has been compressed.
+efi-zboot-objcopy-flags-$(CONFIG_EFI_STUB_IMAGE_INFO) = \
+	--add-symbol efi_zboot_image_info_offset=0x$$( \
+		$(NM) vmlinux | \
+		awk '$$3 == "_efi_image_info_offset_value" { print $$1 }')
+
 # avoid eager evaluation to prevent references to non-existent build artifacts
 OBJCOPYFLAGS_vmlinuz.o = -I binary -O $(EFI_ZBOOT_BFD_TARGET) $(EFI_ZBOOT_OBJCOPY_FLAGS) \
+			  $(efi-zboot-objcopy-flags-y) \
 			  --rename-section .data=.gzdata,load,alloc,readonly,contents
 $(obj)/vmlinuz.o: $(obj)/vmlinuz FORCE
 	$(call if_changed,objcopy)
