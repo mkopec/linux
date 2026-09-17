@@ -92,9 +92,11 @@ efi_zboot_entry(efi_handle_t handle, efi_system_table_t *systab)
 	}
 
 	// Decompress the payload into the newly allocated buffer
-	status = efi_zboot_decompress((void *)image_base, alloc_size) ?:
-	         efi_stub_common(handle, image, image_base, cmdline_ptr);
-
+	status = efi_zboot_decompress((void *)image_base, alloc_size);
+	if (status == EFI_SUCCESS) {
+		efi_cache_sync_image(image_base, alloc_size);
+		status = efi_stub_common(handle, image, image_base, cmdline_ptr);
+	}
 	efi_free(alloc_size, image_base);
 	return status;
 }
