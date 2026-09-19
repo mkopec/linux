@@ -190,10 +190,24 @@ SECTIONS
 
 	.head.text : {
 		_text = .;
+#ifdef CONFIG_ARM64_DRTM
+		/* DEN0113 R314010: The DLME region must start at a 4KB aligned address. */
+		ASSERT((_text & (SZ_4K - 1)) == 0,
+		       "DLME region is not 4 KiB aligned");
+#endif
 		HEAD_TEXT
 	}
 	.text : ALIGN(SEGMENT_ALIGN) {	/* Real text segment		*/
 		_stext = .;		/* Text and read-only data	*/
+#ifdef CONFIG_ARM64_DRTM
+		__drtm_measured_start = _stext;
+		/*
+		 * DEN0113 R314020: The DLME image must start at a 4KB aligned
+		 * address. This happens always because SEGMENT_ALIGN is big.
+		 */
+		ASSERT((__drtm_measured_start & (SZ_4K - 1)) == 0,
+		       "DLME measured start is not 4 KiB aligned");
+#endif
 			IRQENTRY_TEXT
 			SOFTIRQENTRY_TEXT
 			ENTRY_TEXT
@@ -285,6 +299,11 @@ SECTIONS
 		EFI_IMAGE_INFO(
 			/* code_size */
 			EFI_IMAGE_INFO_OFFSET(__inittext_end);
+#ifdef CONFIG_ARM64_DRTM
+			EFI_IMAGE_INFO_OFFSET(__drtm_measured_start);
+			/* dlme_measured_size */
+			EFI_IMAGE_INFO_ENTRY(__drtm_measured_end - __drtm_measured_start);
+#endif
 		)
 	}
 	.exit.data : {
@@ -348,6 +367,44 @@ SECTIONS
 		__mmuoff_data_end = .;
 	}
 
+	/*
+	 * DRTM layout for DEN0113 as it relates to the link layout, refer
+	 * to Figure 8 in 1.4b. In that language:
+	 *  "Free Space 1" is the PE header and padding between _text and
+	 *        __drtm_measured_start (_stext)
+	 *  "DLME Image" is from __drtm_measured_start to __drtm_measured_end
+	 *  "Free Space 2" is kernel efi data/bss/etc till __drtm_dlme_start
+	 *  "DLME Data" is a memory sized "Minimum Size of DLME data"
+	 *        and is retained after boot for use by the kernel
+	 *
+	 * Thus, the DRTM_PARAMETERS follow from that:
+	 *   DLME Region Address = _text's PA ie the start of Image
+	 *   DLME Region Size = DLME Data Offset + "Minimum Size of DLME data"
+	 *   DLME Image Start Offset = __drtm_measured_start - _text
+	 *   DLME Image Size = __drtm_measured_end - __drtm_measured_start
+	 *   DLME Data Offset = __drtm_dlme_start - _text
+	 *   Normal World DCE region address = PA of __drtm_dlme_start +
+	 *                                  "Minimum Size of DLME data"
+	 *
+	 * The EFI stub will place any optional "Normal World DCE" region
+	 * immediately after the "DLME data". It is only used internally by the
+	 * FW during the launch and has no effect on the link layout.
+	 */
+#ifdef CONFIG_ARM64_DRTM
+	__drtm_measured_end = .;
+
+	/*
+	 * Writable EFI stub state. When DRTM is being used the stub's mutable
+	 * data cannot reside in the normal .init.data because that section
+	 * will be measured.
+	 */
+	.unmeasured.data : {
+		*(.unmeasured.data)
+		*(.init.efidata .init.efidata.*)
+		*(.init.efibss .init.efibss.*)
+	}
+#endif
+
 	PECOFF_EDATA_PADDING
 	__pecoff_data_rawsize = ABSOLUTE(. - __initdata_begin);
 	_edata = .;
@@ -370,10 +427,15 @@ SECTIONS
 
 	. += SZ_4K;		/* stack for the early C runtime */
 	early_init_stack = .;
-
 	. = ALIGN(SEGMENT_ALIGN);
 	__pecoff_data_size = ABSOLUTE(. - __initdata_begin);
 	_end = .;
+#ifdef CONFIG_ARM64_DRTM
+	/* DEN0113 R314030: The DLME data must start at a 4KB aligned address. */
+	__drtm_dlme_start = .;
+	ASSERT((__drtm_dlme_start & (SZ_4K - 1)) == 0,
+	       "DLME data is not 4 KiB aligned")
+#endif
 	__pi__end = .;
 
 	STABS_DEBUG

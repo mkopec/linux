@@ -5,7 +5,11 @@
 
 #define ARM64_IMAGE_MAGIC	"ARM\x64"
 
+#ifdef CONFIG_ARM64_DRTM
+#define EFI_IMAGE_INFO_SIZE	40
+#else
 #define EFI_IMAGE_INFO_SIZE	8
+#endif
 
 #define ARM64_IMAGE_FLAG_BE_SHIFT		0
 #define ARM64_IMAGE_FLAG_PAGE_SIZE_SHIFT	(ARM64_IMAGE_FLAG_BE_SHIFT + 1)
@@ -62,6 +66,10 @@ struct arm64_image_header {
  */
 struct efi_image_info {
 	u64 code_size;
+#ifdef CONFIG_ARM64_DRTM
+	u64 drtm_measured_start;
+	u64 dlme_measured_size;
+#endif
 };
 static_assert(sizeof(struct efi_image_info) == EFI_IMAGE_INFO_SIZE);
 
