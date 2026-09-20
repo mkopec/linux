@@ -282,6 +282,10 @@ SECTIONS
 		CON_INITCALL
 		INIT_RAM_FS
 		*(.init.altinstructions .init.bss)	/* from the EFI stub */
+		EFI_IMAGE_INFO(
+			/* code_size */
+			EFI_IMAGE_INFO_OFFSET(__inittext_end);
+		)
 	}
 	.exit.data : {
 		EXIT_DATA

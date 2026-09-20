@@ -5,6 +5,8 @@
 
 #define ARM64_IMAGE_MAGIC	"ARM\x64"
 
+#define EFI_IMAGE_INFO_SIZE	8
+
 #define ARM64_IMAGE_FLAG_BE_SHIFT		0
 #define ARM64_IMAGE_FLAG_PAGE_SIZE_SHIFT	(ARM64_IMAGE_FLAG_BE_SHIFT + 1)
 #define ARM64_IMAGE_FLAG_PHYS_BASE_SHIFT \
@@ -53,6 +55,15 @@ struct arm64_image_header {
 	__le32 magic;
 	__le32 res5;
 };
+
+/*
+ * This struct is filled in by the linker, see EFI_IMAGE_INFO.
+ * Any change requires updating arch/arm64/kernel/vmlinux.lds.S
+ */
+struct efi_image_info {
+	u64 code_size;
+};
+static_assert(sizeof(struct efi_image_info) == EFI_IMAGE_INFO_SIZE);
 
 #endif /* __ASSEMBLER__ */
 

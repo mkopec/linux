@@ -2,7 +2,6 @@
 
 ENTRY(__efistub_efi_zboot_header);
 
-PROVIDE(zboot_code_size = ABSOLUTE(0));
 PROVIDE(efi_zboot_image_info_offset = ABSOLUTE(0));
 
 SECTIONS
@@ -22,9 +21,6 @@ SECTIONS
 		__efistub__gzdata_end = .;
 		*(.rodata* .init.rodata* .srodata*)
 
-		. = ALIGN(4);
-		__efistub_code_size = .;
-		LONG(zboot_code_size);
 		. = ALIGN(8);
 		__efistub_efi_image_info_offset = .;
 		QUAD(efi_zboot_image_info_offset);
