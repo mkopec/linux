@@ -303,6 +303,8 @@ SECTIONS
 			EFI_IMAGE_INFO_OFFSET(__drtm_measured_start);
 			/* dlme_measured_size */
 			EFI_IMAGE_INFO_ENTRY(__drtm_measured_end - __drtm_measured_start);
+			EFI_IMAGE_INFO_OFFSET(drtm_entry);
+			EFI_IMAGE_INFO_OFFSET(arm64_drtm_handoff);
 #endif
 		)
 	}
@@ -381,6 +383,8 @@ SECTIONS
 	 *   DLME Region Address = _text's PA ie the start of Image
 	 *   DLME Region Size = DLME Data Offset + "Minimum Size of DLME data"
 	 *   DLME Image Start Offset = __drtm_measured_start - _text
+	 *   DLME Entry Point Offset = drtm_entry - __drtm_measured_start
+	 *                             (in .init.text)
 	 *   DLME Image Size = __drtm_measured_end - __drtm_measured_start
 	 *   DLME Data Offset = __drtm_dlme_start - _text
 	 *   Normal World DCE region address = PA of __drtm_dlme_start +
@@ -467,6 +471,10 @@ ASSERT(__hyp_idmap_text_end - __hyp_idmap_text_start <= PAGE_SIZE,
 	"HYP init code too big")
 ASSERT(__idmap_text_end - (__idmap_text_start & ~(SZ_4K - 1)) <= SZ_4K,
 	"ID map text too big or misaligned")
+#ifdef CONFIG_ARM64_DRTM
+ASSERT(drtm_entry >= __drtm_measured_start && drtm_entry < __drtm_measured_end,
+	"DRTM entry is outside the measured image")
+#endif
 #ifdef CONFIG_HIBERNATION
 ASSERT(__hibernate_exit_text_end - __hibernate_exit_text_start <= SZ_4K,
        "Hibernate exit text is bigger than 4 KiB")

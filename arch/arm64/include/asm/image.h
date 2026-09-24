@@ -69,6 +69,8 @@ struct efi_image_info {
 #ifdef CONFIG_ARM64_DRTM
 	u64 drtm_measured_start;
 	u64 dlme_measured_size;
+	u64 drtm_entry;
+	u64 arm64_drtm_handoff;
 #endif
 };
 static_assert(sizeof(struct efi_image_info) == EFI_IMAGE_INFO_SIZE);

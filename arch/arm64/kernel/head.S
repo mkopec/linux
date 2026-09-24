@@ -21,6 +21,7 @@
 #include <asm/asm-offsets.h>
 #include <asm/cache.h>
 #include <asm/cputype.h>
+#include <asm/drtm.h>
 #include <asm/el2_setup.h>
 #include <asm/elf.h>
 #include <asm/image.h>
@@ -35,6 +36,7 @@
 #include <asm/stacktrace/frame.h>
 #include <asm/thread_info.h>
 #include <asm/virt.h>
+#include <uapi/linux/psci.h>
 
 #include "efi-header.S"
 
@@ -131,6 +133,87 @@ SYM_CODE_START(primary_entry)
 SYM_CODE_END(primary_entry)
 
 	__INIT
+#ifdef CONFIG_ARM64_DRTM
+/*
+ * Entry point used by a DRTM launch. Verify that information provided by the
+ * EFI stub matches expectations. We rely on an untrusted-write/trusted-verify
+ * approach so this doesn't have to deal with writing to cache-off memory. Per
+ * DEN0113 R45380, the launch supplies:
+ *
+ *   x0 = physical base of the DLME region
+ *   x1 = offset of thee DLME Data, which is several tables written by
+ *        the launch to pass trusted information to the post launch kernel
+ *
+ * These values must match the link layout in vmlinux.lds.S or the launch is
+ * invalid. The EFI stub will get them from the efi_image_info and pass them
+ * into arm_drtm_parameters.
+ *
+ * DEN0113 R45450-R45470 specify the remaining entry state as the PSCI CPU_ON
+ * initial state: AArch64 at the highest Non-secure EL, little-endian, with the
+ * MMU and D-cache disabled and Non-secure asynchronous/debug exceptions
+ * masked.
+ *
+ * Per DEN0113 R45220 the launch cleans and invalidates the whole "DLME region"
+ * which is everything from _text till past __drtm_dlme_start before
+ * it measures the image. Thus the handoff data written into the region by the
+ * EFI stub is safely readable here with the MMU off.
+ */
+SYM_CODE_START(drtm_entry)
+	/* Verify that x0 is the runtime physical address of _text */
+	adr_l	x2, _text
+	cmp	x0, x2
+	b.ne	.Ldrtm_bad_entry
+
+	/* x0 + x1 must be the runtime physical start of the DLME data */
+	add	x3, x0, x1
+	adr_l	x4, __drtm_dlme_start
+	cmp	x3, x4
+	b.ne	.Ldrtm_bad_entry
+
+	/* Stub must set drtm_enabled */
+	adr_l	x4, arm64_drtm_handoff
+	ldrb	w2, [x4, #ARM64_DRTM_HANDOFF_ENABLED_OFFSET]
+	cbz	x2, .Ldrtm_bad_entry
+
+	/* primary_entry(handoff->fdt_addr, 0, 0, 0) */
+	ldr	x0, [x4, #ARM64_DRTM_HANDOFF_FDT_ADDR_OFFSET]
+	mov	x1, xzr
+	mov	x2, xzr
+	mov	x3, xzr
+	b	primary_entry
+
+	/*
+	 * Can't continue, launch is corrupted, spec says the DLME can call
+	 * SET_ERROR which should forward the error to the next boot for
+	 * display.
+	 */
+.Ldrtm_bad_entry:
+	ldr	w0, =ARM_DRTM_SMC_SET_ERROR
+	mov	x1, #ARM_DRTM_MAKE_ERROR(ARM_DRTM_ERROR_PHASE_DLME,
+					 ARM_DRTM_ERROR_ID_VENDOR, 0)
+	mov	x2, xzr
+	mov	x3, xzr
+	mov	x4, xzr
+	mov	x5, xzr
+	mov	x6, xzr
+	mov	x7, xzr
+	smc	#0
+	/* Cold-reset the machine as required after reporting a DLME error */
+	ldr	w0, =PSCI_0_2_FN_SYSTEM_RESET
+	mov	x1, xzr
+	mov	x2, xzr
+	mov	x3, xzr
+	mov	x4, xzr
+	mov	x5, xzr
+	mov	x6, xzr
+	mov	x7, xzr
+	smc	#0
+	/* FW is really broken, just hang. */
+1:	wfe
+	b	1b
+SYM_CODE_END(drtm_entry)
+#endif
+
 SYM_CODE_START_LOCAL(record_mmu_state)
 	mrs	x19, CurrentEL
 	cmp	x19, #CurrentEL_EL2

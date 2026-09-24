@@ -174,6 +174,10 @@
 #define ARM_DRTM_ALREADY_CLOSED			-11
 #define ARM_DRTM_TPM_ERROR			-12
 
+/* Offsets in struct arm64_drtm_handoff */
+#define ARM64_DRTM_HANDOFF_FDT_ADDR_OFFSET	0
+#define ARM64_DRTM_HANDOFF_ENABLED_OFFSET	8
+
 #ifndef __ASSEMBLY__
 
 #include <linux/bitfield.h>
@@ -299,6 +303,22 @@ static inline s64 arm_drtm_enable_secure_interrupts(void)
 			  0, 0, &res);
 	return res.a0;
 }
+
+/*
+ * Since we cannot pass a parameter through the launch to drtm_entry any
+ * additional data is written by the stub here.
+ */
+struct arm64_drtm_handoff {
+	__le64 fdt_addr;
+	u8 drtm_enabled;
+};
+
+static_assert(offsetof(struct arm64_drtm_handoff, fdt_addr) ==
+	      ARM64_DRTM_HANDOFF_FDT_ADDR_OFFSET);
+static_assert(offsetof(struct arm64_drtm_handoff, drtm_enabled) ==
+	      ARM64_DRTM_HANDOFF_ENABLED_OFFSET);
+
+extern struct arm64_drtm_handoff arm64_drtm_handoff;
 
 #endif /* !__ASSEMBLY__ */
 #endif /* __ASM_DRTM_H */
