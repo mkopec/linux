@@ -526,6 +526,18 @@
 	pinctrl-0 = <&i2c4_pins>;
 	clock-frequency = <400000>;
 	status = "okay";
+
+	touchpad@56 {
+		status = "okay";
+		compatible = "hid-over-i2c";
+		reg = <0x56>;
+		interrupt-parent = <&pio>;
+		interrupts = <148 IRQ_TYPE_LEVEL_LOW>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchpad_pins>;
+		hid-descr-addr = <0x0001>;
+		wakeup-source;
+	};
 };
 
 &i2c5 {
@@ -1242,6 +1254,28 @@
 			output-low;
 		};
 	};
+
+	touchscreen_rst: touchscreen-rst-pins {
+		pins-tchscr-rst {
+			pinmux = <PINMUX_GPIO5__FUNC_B_GPIO5>;
+			output-high;
+		};
+	};
+
+	touchscreen_int: touchscreen-int-pins {
+		pins-tchscr-int {
+			pinmux = <PINMUX_GPIO143__FUNC_B_GPIO143>;
+			input-enable;
+		};
+	};
+
+	touchpad_pins: touchpad-pins {
+		pins-irq {
+			pinmux = <PINMUX_GPIO148__FUNC_B_GPIO148>;
+			input-enable;
+			bias-disable;
+		};
+	};
 };
 
 &pmic {
@@ -1331,6 +1365,18 @@
 	pinctrl-0 = <&spi1_pins_default>;
 	pinctrl-1 = <&spi1_pins_sleep>;
 	status = "okay";
+	touchscreen: touchscreen@0 {
+		compatible = "himax,hx83102j";
+		reg = <0>;
+		firmware-name = "himax_i2chid_1002.bin";
+		interrupts-extended = <&pio 143 IRQ_TYPE_LEVEL_LOW>;
+		panel = <&dsi_panel>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&touchscreen_int &touchscreen_rst>;
+		reset-gpios = <&pio 5 GPIO_ACTIVE_LOW>;
+		spi-max-frequency = <12500000>;
+		status = "okay";
+	};
 };
 
 &spi2 {
