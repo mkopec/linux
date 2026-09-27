@@ -2975,7 +2975,7 @@ static int himax_spi_drv_probe(struct spi_device *spi)
 	ts = devm_kzalloc(&spi->dev, sizeof(struct himax_ts_data), GFP_KERNEL);
 	if (!ts)
 		return -ENOMEM;
-	if (spi->master->flags & SPI_MASTER_HALF_DUPLEX) {
+	if (spi->controller->flags & SPI_CONTROLLER_HALF_DUPLEX) {
 		dev_err(ts->dev, "%s: Full duplex not supported by host\n", __func__);
 		return -EIO;
 	}
@@ -3010,8 +3010,8 @@ static int himax_spi_drv_probe(struct spi_device *spi)
 	 * then use the HIMAX_MAX_TP_EV_STACK_SZ as default. Which is the least size for
 	 * each TP event data.
 	 */
-	if (spi->master->max_transfer_size)
-		ts->spi_xfer_max_sz = spi->master->max_transfer_size(spi);
+	if (spi->controller->max_transfer_size)
+		ts->spi_xfer_max_sz = spi->controller->max_transfer_size(spi);
 	else
 		ts->spi_xfer_max_sz = HIMAX_MAX_TP_EV_STACK_SZ;
 
