@@ -136,6 +136,8 @@ struct mtk_dp {
 	struct mutex update_plugged_status_lock;
 };
 
+static void mtk_dp_update_plugged_status(struct mtk_dp *mtk_dp);
+
 struct mtk_dp_data {
 	int bridge_type;
 	unsigned int smc_cmd;
@@ -1996,6 +1998,8 @@ static irqreturn_t mtk_dp_hpd_event_thread(int hpd, void *dev)
 			       sizeof(mtk_dp->info.audio_cur_cfg));
 
 			mtk_dp->enabled = false;
+			mtk_dp->audio_enable = false;
+			mtk_dp_update_plugged_status(mtk_dp);
 			/* power off aux */
 			mtk_dp_update_bits(mtk_dp, MTK_DP_TOP_PWR_STATE,
 					   DP_PWR_STATE_BANDGAP_TPLL,
@@ -2128,13 +2132,13 @@ static int mtk_dp_dt_parse(struct mtk_dp *mtk_dp,
 
 static void mtk_dp_update_plugged_status(struct mtk_dp *mtk_dp)
 {
-	if (!mtk_dp->data->audio_supported || !mtk_dp->audio_enable)
+	if (!mtk_dp->data->audio_supported)
 		return;
 
 	mutex_lock(&mtk_dp->update_plugged_status_lock);
 	if (mtk_dp->plugged_cb && mtk_dp->codec_dev)
 		mtk_dp->plugged_cb(mtk_dp->codec_dev,
-				   mtk_dp->enabled &
+				   mtk_dp->enabled && mtk_dp->audio_enable &&
 				   mtk_dp->info.audio_cur_cfg.detect_monitor);
 	mutex_unlock(&mtk_dp->update_plugged_status_lock);
 }
@@ -2604,15 +2608,16 @@ static int mtk_dp_audio_hw_params(struct device *dev, void *data,
 {
 	struct mtk_dp *mtk_dp = dev_get_drvdata(dev);
 
-	if (!mtk_dp->enabled) {
-		dev_err(mtk_dp->dev, "%s, DP is not ready!\n", __func__);
-		return -ENODEV;
-	}
-
 	mtk_dp->info.audio_cur_cfg.channels = params->cea.channels;
 	mtk_dp->info.audio_cur_cfg.sample_rate = params->sample_rate;
 
-	mtk_dp_audio_setup(mtk_dp, &mtk_dp->info.audio_cur_cfg);
+	/*
+	 * Let ALSA configure the PCM while disconnected; the jack reports
+	 * whether the sink is actually available. Do not program the DP link
+	 * until the bridge is enabled with an audio-capable sink.
+	 */
+	if (mtk_dp->enabled && mtk_dp->audio_enable)
+		mtk_dp_audio_setup(mtk_dp, &mtk_dp->info.audio_cur_cfg);
 
 	return 0;
 }
@@ -2621,7 +2626,8 @@ static int mtk_dp_audio_startup(struct device *dev, void *data)
 {
 	struct mtk_dp *mtk_dp = dev_get_drvdata(dev);
 
-	mtk_dp_audio_mute(mtk_dp, false);
+	if (mtk_dp->enabled && mtk_dp->audio_enable)
+		mtk_dp_audio_mute(mtk_dp, false);
 
 	return 0;
 }
@@ -2638,7 +2644,13 @@ static int mtk_dp_audio_get_eld(struct device *dev, void *data, uint8_t *buf,
 {
 	struct mtk_dp *mtk_dp = dev_get_drvdata(dev);
 
-	if (mtk_dp->enabled)
+	/*
+	 * The HPD IRQ thread sets ->enabled as soon as a cable is plugged in,
+	 * but ->conn is only assigned once mtk_dp_bridge_atomic_enable() runs a
+	 * modeset on this connector. Until then it may be NULL or still refer
+	 * to the previous sink, so do not expose its ELD before audio is ready.
+	 */
+	if (mtk_dp->enabled && mtk_dp->audio_enable && mtk_dp->conn)
 		memcpy(buf, mtk_dp->conn->eld, len);
 	else
 		memset(buf, 0, len);
