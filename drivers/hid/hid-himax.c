@@ -7,9 +7,170 @@
 
 #include "hid-himax.h"
 
+static int himax_cable_detect_func(struct himax_ts_data *ts, bool force_renew);
 static int himax_chip_init(struct himax_ts_data *ts);
+static int himax_get_data(struct himax_ts_data *ts, u8 *data);
+static int himax_heatmap_data_init(struct himax_ts_data *ts);
 static int himax_platform_init(struct himax_ts_data *ts);
+static int himax_switch_data_type(struct himax_ts_data *ts, u32 type);
+static void himax_self_test(struct work_struct *work);
 static void himax_ts_work(struct himax_ts_data *ts);
+
+static const unsigned char g_windows_blob_validation_key[] = {
+	0xfc, 0x28, 0xfe, 0x84, 0x40, 0xcb, 0x9a, 0x87, 0x0d, 0xbe, 0x57, 0x3c, 0xb6, 0x70,
+	0x09, 0x88, 0x07, 0x97, 0x2d, 0x2b, 0xe3, 0x38, 0x34, 0xb6, 0x6c, 0xed, 0xb0, 0xf7,
+	0xe5, 0x9c, 0xf6, 0xc2,	0x2e, 0x84, 0x1b, 0xe8, 0xb4, 0x51, 0x78, 0x43, 0x1f, 0x28,
+	0x4b, 0x7c, 0x2d, 0x53, 0xaf, 0xfc, 0x47, 0x70, 0x1b, 0x59, 0x6f, 0x74, 0x43, 0xc4,
+	0xf3, 0x47, 0x18, 0x53, 0x1a, 0xa2, 0xa1, 0x71,	0xc7, 0x95, 0x0e, 0x31, 0x55, 0x21,
+	0xd3, 0xb5, 0x1e, 0xe9, 0x0c, 0xba, 0xec, 0xb8, 0x89, 0x19, 0x3e, 0xb3, 0xaf, 0x75,
+	0x81, 0x9d, 0x53, 0xb9, 0x41, 0x57, 0xf4, 0x6d, 0x39, 0x25, 0x29, 0x7c,	0x87, 0xd9,
+	0xb4, 0x98, 0x45, 0x7d, 0xa7, 0x26, 0x9c, 0x65, 0x3b, 0x85, 0x68, 0x89, 0xd7, 0x3b,
+	0xbd, 0xff, 0x14, 0x67, 0xf2, 0x2b, 0xf0, 0x2a, 0x41, 0x54, 0xf0, 0xfd, 0x2c, 0x66,
+	0x7c, 0xf8, 0xc0, 0x8f, 0x33, 0x13, 0x03, 0xf1, 0xd3, 0xc1, 0x0b, 0x89, 0xd9, 0x1b,
+	0x62, 0xcd, 0x51, 0xb7,	0x80, 0xb8, 0xaf, 0x3a, 0x10, 0xc1, 0x8a, 0x5b, 0xe8, 0x8a,
+	0x56, 0xf0, 0x8c, 0xaa, 0xfa, 0x35, 0xe9, 0x42, 0xc4, 0xd8, 0x55, 0xc3, 0x38, 0xcc,
+	0x2b, 0x53, 0x5c, 0x69, 0x52, 0xd5, 0xc8, 0x73,	0x02, 0x38, 0x7c, 0x73, 0xb6, 0x41,
+	0xe7, 0xff, 0x05, 0xd8, 0x2b, 0x79, 0x9a, 0xe2, 0x34, 0x60, 0x8f, 0xa3, 0x32, 0x1f,
+	0x09, 0x78, 0x62, 0xbc, 0x80, 0xe3, 0x0f, 0xbd, 0x65, 0x20, 0x08, 0x13,	0xc1, 0xe2,
+	0xee, 0x53, 0x2d, 0x86, 0x7e, 0xa7, 0x5a, 0xc5, 0xd3, 0x7d, 0x98, 0xbe, 0x31, 0x48,
+	0x1f, 0xfb, 0xda, 0xaf, 0xa2, 0xa8, 0x6a, 0x89, 0xd6, 0xbf, 0xf2, 0xd3, 0x32, 0x2a,
+	0x9a, 0xe4, 0xcf, 0x17, 0xb7, 0xb8, 0xf4, 0xe1, 0x33, 0x08, 0x24, 0x8b, 0xc4, 0x43,
+	0xa5, 0xe5, 0x24, 0xc2
+};
+
+/* Extension report descriptor for HIDRAW debug function */
+static union himax_host_ext_rd g_host_ext_rd = {
+	.host_report_descriptor = {
+		0x06, 0x00, 0xff,/* Usage Page (Vendor-defined) */
+		0x09, 0x01,/* Usage (0x1) */
+		0xa1, 0x01,/* Collection (Application) */
+		0x75, 0x08,/* Report Size (8) */
+		0x15, 0x00,/* Logical Minimum (0) */
+		0x26, 0xff, 0x00,/* Logical Maximum (255) */
+		0x85, HIMAX_ID_CFG,/* Report ID (5) */
+		0x09, 0x02,/* Usage (0x2) */
+		0x96, 0xff, 0x00,/* Report Count (255) */
+		0xb1, 0x02,/* Feature (ID: 5, sz: 2040 bits(255 bytes)) */
+		0x85, HIMAX_ID_REG_RW,/* Report ID (6) */
+		0x09, 0x02,/* Usage (0x2) */
+		0x96, (HIMAX_HID_REG_SZ_MAX & 0xff), (HIMAX_HID_REG_SZ_MAX >> 8),
+		0xb1, 0x02,/* Feature (ID: 6, sz: 72 bits(9 bytes)) */
+		0x85, HIMAX_ID_TOUCH_MONITOR_SEL,/* Report ID (7) */
+		0x09, 0x02,/* Usage (0x2) */
+		0x96, 0x04, 0x00,/* Report Count (4) */
+		0xb1, 0x02,/* Feature (ID: 7, sz: 32 bits(4 bytes)) */
+		0x85, HIMAX_ID_TOUCH_MONITOR,/* Report ID (8) */
+		0x09, 0x02,/* Usage (0x2) */
+		0x96, 0x8d, 0x13,/* Report Count (5005) */
+		0xb1, 0x02,/* Feature (ID: 8, sz: 40040 bits(5005 bytes)) */
+		0x85, HIMAX_ID_FW_UPDATE,/* Report ID (10) */
+		0x09, 0x02,/* Usage (0x2) */
+		0x96, 0x00, 0x04,/* Report Count (1024) */
+		0x91, 0x02,/* Output (ID: 10, sz: 8192 bits(1024 bytes)) */
+		0x85, HIMAX_ID_FW_UPDATE_HANDSHAKING,/* Report ID (11) */
+		0x09, 0x02,/* Usage (0x2) */
+		0x96, 0x01, 0x00,/* Report Count (1) */
+		0xb1, 0x02,/* Feature (ID: 11, sz: 8 bits(1 bytes)) */
+		0x85, HIMAX_ID_SELF_TEST,/* Report ID (12) */
+		0x09, 0x02,/* Usage (0x2) */
+		0x96, 0x01, 0x00,/* Report Count (1) */
+		0xb1, 0x02,/* Feature (ID: 12, sz: 8 bits(1 bytes)) */
+		0x85, HIMAX_ID_INPUT_RD_DE,/* Report ID (49) */
+		0x09, 0x02,/* Usage (0x2) */
+		0x96, 0x01, 0x00,/* Report Count (1) */
+		0xb1, 0x02,/* Feature (ID: 49, sz: 8 bits(1 bytes)) */
+		0x85, HIMAX_ID_WINDOWS_BLOB_VALID,
+		0x09, 0xc5,/* Usage (0xc5) */
+		0x96, sizeof(g_windows_blob_validation_key) & 0xff,
+		(sizeof(g_windows_blob_validation_key) >> 8) & 0xff,/* Report Count (256) */
+		0xb1, 0x02,/* Feature (ID: 50, sz: 2048 bits(256 bytes)) */
+		0xc0,/* End Collection */
+	},
+};
+
+static const unsigned int g_host_ext_report_desc_sz =
+	sizeof(g_host_ext_rd.host_report_descriptor);
+
+/* Dummy FW layout for user space tool update reference */
+static const struct himax_hid_fw_unit g_dummy_main_code[9] = {
+	{
+		/* 0xa1 means part 0 ready, can send this part of FW */
+		.cmd = 0xa1,
+		.bin_start_offset = 0,
+		.unit_sz = 127,
+	},
+	{
+		/* 0xa2 means part 1 ready, can send this part of FW */
+		.cmd = 0xa2,
+		.bin_start_offset = 129,
+		.unit_sz = 111,
+	},
+};
+
+static const u16 g_himax_hid_raw_data_type[HIMAX_HID_RAW_DATA_TYPE_MAX] = {
+	HIMAX_HID_RAW_DATA_TYPE_DELTA,
+	HIMAX_HID_RAW_DATA_TYPE_RAW,
+	HIMAX_HID_RAW_DATA_TYPE_BASELINE,
+	HIMAX_HID_RAW_DATA_TYPE_NORMAL
+};
+
+/* Heatmap report descriptor for input disabled mode */
+static union himax_heatmap_rd g_heatmap_rd = {
+	.host_report_descriptor = {
+		0x05, 0x0d,/* Usage Page (Digitizers) */
+		0x09, 0x0f,/* Usage (0xf) */
+		0xa1, 0x01,/* Collection (Application) */
+		0x85, 0x61,/* Report ID (97) */
+		0x05, 0x0d,/* Usage Page (Digitizers) */
+		0x15, 0x00,/* Logical Minimum (0) */
+		0x27, 0xff, 0xff, 0x00, 0x00,/* Logical Maximum (65535) */
+		0x75, 0x10,/* Report Size (16) */
+		0x95, 0x01,/* Report Count (1) */
+		0x09, 0x6a,/* Usage (0x6a) */
+		0x81, 0x02,/* Input (ID: 97, sz: 16 bits(2 bytes)) */
+		0x09, 0x6b,/* Usage (0x6b) */
+		0x81, 0x02,/* Input (ID: 97, sz: 16 bits(2 bytes)) */
+		0x27, 0xff, 0xff, 0xff, 0xff,/* Logical Maximum (-1) */
+		0x75, 0x20,/* Report Size (32) */
+		0x09, 0x56,/* Usage (0x56) */
+		0x81, 0x02,/* Input (ID: 97, sz: 32 bits(4 bytes)) */
+		0x05, 0x01,/* Usage Page (Generic Desktop) */
+		0x09, 0x3b,/* Usage (0x3b) */
+		0x81, 0x02,/* Input (ID: 97, sz: 32 bits(4 bytes)) */
+		0x05, 0x0d,/* Usage Page (Digitizers) */
+		0x26, 0xff, 0x00,/* Logical Maximum (255) */
+		0x09, 0x6c,/* Usage (0x6c) */
+		0x75, 0x08,/* Report Size (8) */
+		0x96, 0x00, 0x0c,/* Report Count (3072) */
+		0x81, 0x02,/* Input (ID: 97, sz: 24576 bits(3072 bytes)) */
+		0xc0,/* End Collection */
+	},
+};
+
+static const unsigned int g_host_heatmap_report_desc_sz =
+	sizeof(g_heatmap_rd.host_report_descriptor);
+
+/* Need to map HID_INSPECTION_ENUM */
+static char *g_himax_inspection_mode[] = {
+	"HIMAX_OPEN",
+	"HIMAX_MICRO_OPEN",
+	"HIMAX_SHORT",
+	"HIMAX_ABS_NOISE",
+	"HIMAX_RAWDATA",
+	"HIMAX_SORTING",
+	"HIMAX_BACK_NORMAL",
+	NULL
+};
+
+static const u16 g_hx_data_type[HIMAX_DATA_TYPE_MAX] = {
+	HIMAX_DATA_TYPE_SORTING,
+	HIMAX_DATA_TYPE_OPEN,
+	HIMAX_DATA_TYPE_MICRO_OPEN,
+	HIMAX_DATA_TYPE_SHORT,
+	HIMAX_DATA_TYPE_RAWDATA,
+	HIMAX_DATA_TYPE_NOISE,
+	HIMAX_DATA_TYPE_BACK_NORMAL,
+};
 
 /**
  * himax_spi_read() - Read data from SPI
@@ -120,7 +281,7 @@ static int himax_read(struct himax_ts_data *ts, u8 cmd, u8 *buf, u32 len)
 
 	if (len + HIMAX_BUS_R_HLEN > ts->spi_xfer_max_sz) {
 		dev_err(ts->dev, "%s, len[%u] is over %u\n", __func__,
-		  len + HIMAX_BUS_R_HLEN, ts->spi_xfer_max_sz);
+			len + HIMAX_BUS_R_HLEN, ts->spi_xfer_max_sz);
 		return -EINVAL;
 	}
 
@@ -167,7 +328,7 @@ static int himax_write(struct himax_ts_data *ts, u8 cmd, u8 *addr, const u8 *dat
 
 	if (len + HIMAX_BUS_W_HLEN > ts->spi_xfer_max_sz) {
 		dev_err(ts->dev, "%s: len[%u] is over %u\n", __func__,
-		  len + HIMAX_BUS_W_HLEN, ts->spi_xfer_max_sz);
+			len + HIMAX_BUS_W_HLEN, ts->spi_xfer_max_sz);
 		return -EFAULT;
 	}
 
@@ -199,7 +360,7 @@ static int himax_write(struct himax_ts_data *ts, u8 cmd, u8 *addr, const u8 *dat
 
 	if (written != len + HIMAX_BUS_W_HLEN) {
 		dev_err(ts->dev, "%s: actual write length mismatched: %u != %u\n",
-		  __func__, written, len + HIMAX_BUS_W_HLEN);
+			__func__, written, len + HIMAX_BUS_W_HLEN);
 		return -EIO;
 	}
 
@@ -335,7 +496,7 @@ read_end:
 	mutex_unlock(&ts->reg_lock);
 	if (ret < 0)
 		dev_err(ts->dev, "%s: addr = 0x%08X, len = %u, ret = %d\n", __func__,
-		  addr, len, ret);
+			addr, len, ret);
 
 	return ret;
 }
@@ -389,9 +550,77 @@ write_end:
 	mutex_unlock(&ts->reg_lock);
 	if (ret < 0)
 		dev_err(ts->dev, "%s: addr = 0x%08X, len = %u, ret = %d\n", __func__,
-		  addr, len, ret);
+			addr, len, ret);
 
 	return ret;
+}
+
+/**
+ * himax_write_read_reg() - Write and read back data for handshake confirm
+ * @ts: Himax touch screen data
+ * @addr: Address to write
+ * @data: Data to write
+ * @hb: High byte of confirmation data
+ * @lb: Low byte of confirmation data
+ *
+ * Write data to IC register/sram and read back for handshake confirm. The
+ * process contain two stage, first stage is to write the data to IC,
+ * then read back the data from the same address to confirm the data is written
+ * successfully. The second stage is to read back data from the same address
+ * again to confirm handshake password is the same as confirmation data,
+ * which means the operation is done successfully. There may had a chance that
+ * data read back equals to confirmation data at first stage, in this case, return
+ * operation complete directly.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int himax_write_read_reg(struct himax_ts_data *ts, u32 addr, u8 *data, u8 hb, u8 lb)
+{
+	int ret;
+	u32 retry_cnt;
+	const u32 write_confirm_retry = 40;
+	const u32 read_confirm_retry = 200;
+	union himax_dword_data r_data, t_data;
+
+	memcpy(t_data.byte, data, HIMAX_REG_SZ);
+	for (retry_cnt = 0; retry_cnt < write_confirm_retry; retry_cnt++) {
+		ret = himax_mcu_register_read(ts, addr, r_data.byte, HIMAX_REG_SZ);
+		if (ret < 0) {
+			usleep_range(1000, 1100);
+			continue;
+		}
+		if (r_data.byte[1] == t_data.byte[1] && r_data.byte[0] == t_data.byte[0])
+			break;
+		else if (r_data.byte[1] == hb && r_data.byte[0] == lb)
+			return 0;
+
+		himax_mcu_register_write(ts, addr, t_data.byte, HIMAX_REG_SZ);
+		usleep_range(1000, 1100);
+	}
+
+	if (retry_cnt == write_confirm_retry)
+		goto err_retry_over;
+
+	for (retry_cnt = 0; retry_cnt < read_confirm_retry; retry_cnt++) {
+		ret = himax_mcu_register_read(ts, addr, r_data.byte, HIMAX_REG_SZ);
+		if (ret < 0) {
+			usleep_range(1000, 1100);
+			continue;
+		}
+		if (r_data.byte[1] == hb && r_data.byte[0] == lb)
+			return 0;
+
+		usleep_range(10000, 10100);
+	}
+
+err_retry_over:
+	dev_err(ts->dev, "%s: failed to handshaking with DSRAM\n", __func__);
+	dev_err(ts->dev, "%s: addr = 0x%08X; data = 0x%02X%02X%02X%02X\n", __func__,
+		addr, data[3], data[2], data[1], data[0]);
+	dev_err(ts->dev, "%s: target = %02X%02X; r_data = %02X%02X\n", __func__,
+		hb, lb, r_data.byte[1], r_data.byte[0]);
+
+	return -EIO;
 }
 
 /**
@@ -506,7 +735,7 @@ static void himax_int_enable(struct himax_ts_data *ts, bool enable)
 	}
 	spin_unlock_irqrestore(&ts->irq_lock, flags);
 	dev_info(ts->dev, "%s: Interrupt %s\n", __func__,
-	  atomic_read(&ts->irq_state) ? "enabled" : "disabled");
+		 atomic_read(&ts->irq_state) ? "enabled" : "disabled");
 }
 
 /**
@@ -673,7 +902,7 @@ static int hx83102j_sense_off(struct himax_ts_data *ts, bool check_en)
 		}
 		if (data.byte[0] != HIMAX_REG_DATA_FW_STATE_RUNNING) {
 			dev_info(ts->dev, "%s: Do not need wait FW, Status = 0x%02X!\n", __func__,
-			  data.byte[0]);
+				 data.byte[0]);
 			break;
 		}
 
@@ -820,13 +1049,14 @@ static int hx83102j_chip_detect(struct himax_ts_data *ts)
 
 		data.dword = le32_to_cpu(data.dword);
 		if ((data.dword & ic_id_mask) == HIMAX_REG_DATA_ICID) {
+			ts->ic_data.bl_size = HIMAX_HX83102J_FLASH_SIZE;
 			ts->ic_data.icid = data.dword;
 			dev_info(ts->dev, "%s: Detect IC HX83102J successfully\n", __func__);
 			return 0;
 		}
 	}
 	dev_err(ts->dev, "%s: Read driver ID register Fail! IC ID = %X,%X,%X\n", __func__,
-	  data.byte[3], data.byte[2], data.byte[1]);
+		data.byte[3], data.byte[2], data.byte[1]);
 
 	return -ENODEV;
 }
@@ -903,6 +1133,81 @@ static int himax_ts_register_interrupt(struct himax_ts_data *ts)
 }
 
 /**
+ * himax_check_power_status() - Check power status
+ * @work: Work struct
+ *
+ * This function is used to check the power status. The function will call
+ * power_supply_is_system_supplied() to get the power status, and call
+ * himax_cable_detect_func() to update power status to FW.
+ *
+ * Return: None
+ */
+static void himax_check_power_status(struct work_struct *work)
+{
+	struct himax_ts_data *ts = container_of(work, struct himax_ts_data,
+						work_pwr.work);
+
+	ts->latest_power_status = power_supply_is_system_supplied();
+
+	dev_info(ts->dev, "Update ts->latest_power_status = %X\n", ts->latest_power_status);
+
+	if (himax_cable_detect_func(ts, true))
+		dev_err(ts->dev, "%s: update cable status failed!\n", __func__);
+}
+
+/**
+ * pwr_notifier_callback() - Power notifier callback
+ * @self: Notifier block
+ * @event: Event from notifier
+ * @data: private data from notifier
+ *
+ * This function is used to handle the power notifier event. The function will
+ * schedule a delayed work to call himax_check_power_status() to check the power
+ * status. Due to power notifier often called multiple times, the function will
+ * cancel the previous delayed work and schedule a new one to work as a debounce.
+ *
+ * Return: 0
+ */
+static int pwr_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
+{
+	struct himax_ts_data *ts = container_of(self, struct himax_ts_data,
+						power_notif);
+
+	cancel_delayed_work_sync(&ts->work_pwr);
+	queue_delayed_work(ts->himax_pwr_wq, &ts->work_pwr,
+			   msecs_to_jiffies(HIMAX_DELAY_PWR_CHECK_MS));
+
+	return 0;
+}
+
+/**
+ * himax_pwr_register() - Register power notifier
+ * @work: Work struct
+ *
+ * This function is used to register the power notifier. The function will call
+ * power_supply_reg_notifier() to register the power notifier, and schedule a
+ * delayed work to call himax_check_power_status() to check the power status.
+ *
+ * Return: None
+ */
+static void himax_pwr_register(struct work_struct *work)
+{
+	int ret;
+	struct himax_ts_data *ts = container_of(work, struct himax_ts_data,
+						work_pwr.work);
+
+	ts->power_notif.notifier_call = pwr_notifier_callback;
+	ret = power_supply_reg_notifier(&ts->power_notif);
+	if (ret) {
+		dev_err(ts->dev, "%s: Unable to register power_notif: %d\n", __func__, ret);
+	} else {
+		INIT_DELAYED_WORK(&ts->work_pwr, himax_check_power_status);
+		queue_delayed_work(ts->himax_pwr_wq, &ts->work_pwr,
+				   msecs_to_jiffies(HIMAX_DELAY_PWR_INIT_CHECK_MS));
+	}
+}
+
+/**
  * hx83102j_read_event_stack() - Read event stack from touch chip
  * @ts: Himax touch screen data
  * @buf: Buffer to store the data
@@ -937,12 +1242,15 @@ static int hx83102j_read_event_stack(struct himax_ts_data *ts, u8 *buf, u32 leng
  *
  * This function is used to initialize hx83102j touch specific data in himax_ts_data.
  * The chip_max_dsram_size is the maximum size of the DSRAM of hx83102j.
+ * The ic_data.enc16bits is the flag to indicate the heatmap data is transferred in
+ * 16 bits or 12 bits.
  *
  * Return: None
  */
 static void hx83102j_chip_init_data(struct himax_ts_data *ts)
 {
 	ts->chip_max_dsram_size = HIMAX_HX83102J_DSRAM_SZ;
+	ts->ic_data.enc16bits = false;
 }
 
 /**
@@ -1049,7 +1357,7 @@ static int himax_mcu_read_FW_status(struct himax_ts_data *ts)
 		}
 
 		dev_info(ts->dev, "%s: %10s(0x%08X) = 0x%02X, 0x%02X, 0x%02X, 0x%02X\n",
-		  __func__, reg_name[i], dbg_reg_array[i],
+			 __func__, reg_name[i], dbg_reg_array[i],
 			 data[0], data[1], data[2], data[3]);
 	}
 
@@ -1071,6 +1379,7 @@ static int himax_mcu_power_on_init(struct himax_ts_data *ts)
 {
 	int ret;
 	u32 retry_cnt;
+	const u32 hw_reset = 0x02;
 	const u32 retry_limit = 30;
 	union himax_dword_data data;
 
@@ -1111,6 +1420,19 @@ static int himax_mcu_power_on_init(struct himax_ts_data *ts)
 
 	dev_info(ts->dev, "%s: waiting for FW reload data\n", __func__);
 	for (retry_cnt = 0; retry_cnt < retry_limit; retry_cnt++) {
+		ret = himax_mcu_register_read(ts, HIMAX_REG_ADDR_RESET_FLAG, data.byte, 4);
+		if (ret < 0) {
+			dev_err(ts->dev, "%s: read reset flag fail\n", __func__);
+			return ret;
+		}
+
+		/* when reset flag not expected, return EAGAIN for retry */
+		if (data.dword != hw_reset) {
+			dev_err(ts->dev, "%s: abnormal reset happened, need to reload FW\n",
+				__func__);
+			return -EAGAIN;
+		}
+
 		ret = himax_mcu_register_read(ts, HIMAX_DSRAM_ADDR_2ND_FLASH_RELOAD, data.byte, 4);
 		if (ret < 0) {
 			dev_err(ts->dev, "%s: read FW reload status fail\n", __func__);
@@ -1123,6 +1445,7 @@ static int himax_mcu_power_on_init(struct himax_ts_data *ts)
 			break;
 		}
 		dev_info(ts->dev, "%s: wait FW reload %u times\n", __func__, retry_cnt + 1);
+
 		ret = himax_mcu_read_FW_status(ts);
 		if (ret < 0)
 			dev_err(ts->dev, "%s: read FW status fail\n", __func__);
@@ -1259,6 +1582,159 @@ static int himax_mcu_check_crc(struct himax_ts_data *ts, u32 start_addr,
 }
 
 /**
+ * himax_mcu_usb_detect_set() - Update power status to FW
+ * @ts: Himax touch screen data
+ * @plugged: Power status, 0 for not connected, 1 for connected
+ *
+ * This function is used to update the power status to the touch chip. The function
+ * write the power status to the TPIC, and read back to verify the write is successful.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int himax_mcu_usb_detect_set(struct himax_ts_data *ts, bool plugged)
+{
+	int ret;
+	u32 retry_cnt;
+	const u32 retry_limit = 5;
+	union himax_dword_data wdata, rdata;
+
+	for (retry_cnt = 0; retry_cnt < retry_limit; retry_cnt++) {
+		if (plugged)
+			wdata.dword = cpu_to_le32(HIMAX_DSRAM_DATA_USB_ATTACH);
+		else
+			wdata.dword = cpu_to_le32(HIMAX_DSRAM_DATA_USB_DETACH);
+
+		ret = himax_mcu_register_write(ts, HIMAX_DSRAM_ADDR_USB_DETECT, wdata.byte, 4);
+		if (ret < 0) {
+			dev_err(ts->dev, "%s: write USB detect status fail!\n", __func__);
+			return ret;
+		}
+
+		ret = himax_mcu_register_read(ts, HIMAX_DSRAM_ADDR_USB_DETECT, rdata.byte, 4);
+		if (ret < 0) {
+			dev_err(ts->dev, "%s: read USB detect status fail!\n", __func__);
+			return ret;
+		}
+
+		if (rdata.dword == wdata.dword)
+			break;
+	}
+
+	if (retry_cnt == retry_limit) {
+		dev_err(ts->dev, "%s: Failed to set USB detect status\n", __func__);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+/**
+ * himax_mcu_diag_register_set() - Set diag command for hidraw debug
+ * @ts: Himax touch screen data
+ * @diag_cmd: Diagnose command
+ *
+ * This function is used to set the diagnose parameter for hidraw ioctl. Which is the
+ * same as the raw out select register in TPIC. The ioctl may call in any time, so we
+ * call himax_mcu_interface_on() to make sure the TPIC is ready to receive the command.
+ * Then write data to TPIC and read back to verify the write is successful.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int himax_mcu_diag_register_set(struct himax_ts_data *ts, u8 diag_cmd)
+{
+	int ret;
+	u32 retry_cnt;
+	const u32 retry_limit = 50;
+	union himax_dword_data tmp_data, back_data;
+
+	tmp_data.dword = cpu_to_le32(diag_cmd);
+	ret = himax_mcu_interface_on(ts);
+	if (ret < 0)
+		return ret;
+
+	for (retry_cnt = 0; retry_cnt < retry_limit; retry_cnt++) {
+		ret = himax_mcu_register_write(ts, HIMAX_HX83102J_DSRAM_ADDR_RAW_OUT_SEL,
+					       tmp_data.byte, 4);
+		if (ret < 0) {
+			dev_err(ts->dev, "%s: write raw out select fail!\n", __func__);
+			return ret;
+		}
+		ret = himax_mcu_register_read(ts, HIMAX_HX83102J_DSRAM_ADDR_RAW_OUT_SEL,
+					      back_data.byte, 4);
+		if (ret < 0) {
+			dev_err(ts->dev, "%s: read raw out select fail!\n", __func__);
+			return ret;
+		}
+
+		if (tmp_data.byte[0] == back_data.byte[0])
+			break;
+	}
+
+	if (tmp_data.byte[0] != back_data.byte[0]) {
+		dev_err(ts->dev, "%s: Failed to set diagnose register\n", __func__);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+/**
+ * himax_mcu_diag_register_get() - Get diag command for hidraw debug
+ * @ts: Himax touch screen data
+ * @val: Diagnose value to return
+ *
+ * This function is used to get the diagnose parameter for hidraw ioctl.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int himax_mcu_diag_register_get(struct himax_ts_data *ts, u32 *val)
+{
+	int ret;
+
+	ret = himax_mcu_register_read(ts, HIMAX_HX83102J_DSRAM_ADDR_RAW_OUT_SEL, (u8 *)val, 4);
+	if (ret < 0) {
+		dev_err(ts->dev, "%s: read raw out select fail!\n", __func__);
+		return ret;
+	}
+	*val = le32_to_cpu(*val);
+
+	return 0;
+}
+
+/**
+ * himax_hid_update_info() - Update hid info
+ * @ts: Himax touch screen data
+ *
+ * This function is used to update the hid info from firmware image and IC data
+ * for hidraw ioctl to get the hid info. Which tell user space tool the touch
+ * information and how to update the firmware at runtime.The firmware update
+ * mapping tells user space tool how to update the firmware, it separates into
+ * bl part and main part. The bl part is used to update the bootloader, and runs
+ * only once. Which suits the need to update firmware through SPI. So we give
+ * bin_start_offset 0, and unit_sz as the size of firmware image in KB.
+ *
+ * Return: None
+ */
+static void himax_hid_update_info(struct himax_ts_data *ts)
+{
+	memcpy(&ts->hid_info.fw_bin_desc, &ts->fw_bin_desc, sizeof(struct himax_bin_desc));
+	ts->hid_info.vid = cpu_to_be16(ts->hid_desc.vendor_id);
+	ts->hid_info.pid = cpu_to_be16(ts->hid_desc.product_id);
+	ts->hid_info.cfg_version = ts->ic_data.vendor_touch_cfg_ver;
+	ts->hid_info.disp_version = ts->ic_data.vendor_display_cfg_ver;
+	ts->hid_info.rx = ts->ic_data.rx_num;
+	ts->hid_info.tx = ts->ic_data.tx_num;
+	ts->hid_info.y_res = cpu_to_be16(ts->ic_data.y_res);
+	ts->hid_info.x_res = cpu_to_be16(ts->ic_data.x_res);
+	ts->hid_info.pt_num = ts->ic_data.max_point;
+	ts->hid_info.mkey_num = ts->ic_data.button_num;
+	/* firmware table parameters, use only bl part. */
+	ts->hid_info.bl_mapping.cmd = HIMAX_HID_FW_UPDATE_BL_CMD;
+	ts->hid_info.bl_mapping.bin_start_offset = 0;
+	ts->hid_info.bl_mapping.unit_sz = ts->ic_data.bl_size / 1024;
+}
+
+/**
  * himax_mcu_read_FW_ver() - Read varies version from touch chip
  * @ts: Himax touch screen data
  *
@@ -1320,6 +1796,30 @@ static int himax_mcu_read_FW_ver(struct himax_ts_data *ts)
 	}
 	memcpy(ts->ic_data.vendor_proj_info, data, HIMAX_TP_INFO_STR_LEN);
 	dev_info(ts->dev, "%s: Project ID : %s\n", __func__, ts->ic_data.vendor_proj_info);
+	himax_hid_update_info(ts);
+
+	return 0;
+}
+
+/**
+ * himax_mcu_check_sorting_mode() - Read sorting mode from touch chip
+ * @ts: Himax touch screen data
+ * @tmp_data_in: Buffer to store the data
+ *
+ * This function is used to read the sorting mode from the touch chip
+ * for hidraw ioctl to get the sorting mode.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int himax_mcu_check_sorting_mode(struct himax_ts_data *ts, u8 *tmp_data_in)
+{
+	int ret;
+
+	ret = himax_mcu_register_read(ts, HIMAX_DSRAM_ADDR_SORTING_MODE_EN, tmp_data_in, 4);
+	if (ret < 0) {
+		dev_err(ts->dev, "%s: read sorting mode fail\n", __func__);
+		return ret;
+	}
 
 	return 0;
 }
@@ -1329,6 +1829,7 @@ static int himax_mcu_read_FW_ver(struct himax_ts_data *ts)
  * @ts: Himax touch screen data
  * @addr: Address of the data in firmware image
  * @descript_buf: token for parsing
+ * @fw_all_data: Firmware image
  *
  * This function is used to parse the descriptor data from the firmware token. The
  * descriptors are mappings of information in the firmware image. The function will
@@ -1338,7 +1839,8 @@ static int himax_mcu_read_FW_ver(struct himax_ts_data *ts)
  *
  * Return: true on success, false on failure
  */
-static bool himax_bin_desc_data_get(struct himax_ts_data *ts, u32 addr, u8 *descript_buf)
+static bool himax_bin_desc_data_get(struct himax_ts_data *ts,
+				    u32 addr, u8 *descript_buf,	const u8 *fw_all_data)
 {
 	u16 chk_end;
 	u16 chk_sum;
@@ -1376,6 +1878,9 @@ static bool himax_bin_desc_data_get(struct himax_ts_data *ts, u32 addr, u8 *desc
 			case HIMAX_FW_CID:
 				ts->fw_info_table.addr_cid_ver_major = image_offset;
 				ts->fw_info_table.addr_cid_ver_minor = image_offset + 1;
+				memcpy(&ts->fw_bin_desc, &fw_all_data
+				       [image_offset - sizeof(ts->hid_info.fw_bin_desc.passwd)],
+				       sizeof(struct himax_bin_desc));
 				break;
 			/* FW version */
 			case HIMAX_FW_VER:
@@ -1440,7 +1945,7 @@ static bool himax_mcu_bin_desc_get(unsigned char *fw, struct himax_ts_data *ts, 
 	for (addr = 0, mapping_count = 0; addr < max_sz; addr += HIMAX_HX83102J_PAGE_SIZE) {
 		fw_buf = &fw[addr];
 		/* Get related data */
-		keep_on_flag = himax_bin_desc_data_get(ts, addr, fw_buf);
+		keep_on_flag = himax_bin_desc_data_get(ts, addr, fw_buf, fw);
 		if (keep_on_flag)
 			mapping_count++;
 		else
@@ -1448,6 +1953,98 @@ static bool himax_mcu_bin_desc_get(unsigned char *fw, struct himax_ts_data *ts, 
 	}
 
 	return mapping_count > 0;
+}
+
+/**
+ * himax_mcu_get_DSRAM_data() - Get DSRAM data from touch chip
+ * @ts: Himax touch screen data
+ * @info_data: Buffer to store the data
+ *
+ * This function is used to get the inspection data from DSRAM for hidraw ioctl.
+ * The inspection data contains capacitance data in two forms: mutual and self.
+ * The mutual data size is (rx_num * tx_num) * 2, and the self data size is
+ * (rx_num + tx_num) * 2. The first 4 bytes are the password, used as handshake
+ * to request FW put the data to DSRAM. And read back to confirm data is ready.
+ * After the data is read, the function will check the checksum of the data to
+ * make sure the data is correct. If the checksum is correct, the data will be
+ * stored to the info_data buffer. After we got the data, we will tell the FW
+ * that data is read, and stop outputing the data.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int himax_mcu_get_DSRAM_data(struct himax_ts_data *ts, u8 *info_data)
+{
+	int ret, stop_ret;
+	u8  *temp_info_data;
+	const u8 password_mask = GENMASK(7, 0);
+	u32 checksum;
+	u32 i;
+	u32 retry_cnt;
+	const u32 handshake_pwd_sz = 4;
+	const u32 retry_limit = 5;
+	const u32 x_num = ts->ic_data.rx_num;
+	const u32 y_num = ts->ic_data.tx_num;
+	/* 1. determine total size from rx tx amount */
+	u32 total_sz = (x_num * y_num + x_num + y_num) * 2 + handshake_pwd_sz;
+	union himax_dword_data data;
+
+	temp_info_data = kcalloc((total_sz + 8), sizeof(u8), GFP_KERNEL);
+	if (!temp_info_data)
+		return -ENOMEM;
+
+	/* 2. Start handshake and Wait Data Ready */
+	data.dword = cpu_to_le32(HIMAX_SRAM_PASSWRD_START);
+	ret = himax_write_read_reg(ts, HIMAX_DSRAM_ADDR_RAWDATA,
+				   data.byte, HIMAX_SRAM_PASSWRD_END >> 8,
+				   HIMAX_SRAM_PASSWRD_END & password_mask);
+	if (ret < 0) {
+		dev_err(ts->dev, "Data NOT ready => bypass");
+		kfree(temp_info_data);
+		return ret;
+	}
+
+	/* 3. Read RawData */
+	for (retry_cnt = 0; retry_cnt < retry_limit; retry_cnt++) {
+		ret = himax_mcu_register_read(ts, HIMAX_DSRAM_ADDR_RAWDATA,
+					      temp_info_data, total_sz);
+		if (ret < 0) {
+			dev_err(ts->dev, "%s: read DSRAM data fail\n", __func__);
+			goto error_exit;
+		}
+
+		/*
+		 * 4. Check Data Checksum
+		 * start from location 2 means PASSWORD NOT included
+		 */
+		checksum = 0;
+		for (i = 2; i < total_sz; i += 2)
+			checksum += temp_info_data[i + 1] << 8 | temp_info_data[i];
+
+		if (checksum % 0x10000 != 0) {
+			dev_err(ts->dev, "%s: check_sum_cal fail=%08X\n", __func__, checksum);
+		} else {
+			memcpy(info_data, temp_info_data, total_sz * sizeof(u8));
+			break;
+		}
+	}
+	if (checksum % 0x10000 != 0) {
+		dev_err(ts->dev, "%s: retry_cnt = %u\n", __func__, retry_cnt);
+		ret = -EINVAL;
+	}
+
+error_exit:
+	/* 4. FW stop outputing */
+	data.dword = 0;
+	data.byte[3] = temp_info_data[3];
+	data.byte[2] = temp_info_data[2];
+	stop_ret = himax_mcu_register_write(ts, HIMAX_DSRAM_ADDR_RAWDATA, data.byte, HIMAX_REG_SZ);
+	kfree(temp_info_data);
+	if (stop_ret < 0) {
+		dev_err(ts->dev, "%s: stop outputing fail\n", __func__);
+		return stop_ret;
+	}
+
+	return ret;
 }
 
 /**
@@ -1556,16 +2153,32 @@ static int himax_mcu_tp_info_check(struct himax_ts_data *ts)
 	}
 
 	dev_info(ts->dev, "%s: rx_num = %u, tx_num = %u\n", __func__,
-	  ts->ic_data.rx_num, ts->ic_data.tx_num);
+		 ts->ic_data.rx_num, ts->ic_data.tx_num);
 	dev_info(ts->dev, "%s: max_point = %u\n", __func__, ts->ic_data.max_point);
 	dev_info(ts->dev, "%s: interrupt_is_edge = %s, stylus_function = %s\n", __func__,
-	  ts->ic_data.interrupt_is_edge ? "true" : "false",
+		 ts->ic_data.interrupt_is_edge ? "true" : "false",
 		 ts->ic_data.stylus_function ? "true" : "false");
 	dev_info(ts->dev, "%s: stylus_v2 = %s, stylus_ratio = %u\n", __func__,
-	  ts->ic_data.stylus_v2 ? "true" : "false", ts->ic_data.stylus_ratio);
+		 ts->ic_data.stylus_v2 ? "true" : "false", ts->ic_data.stylus_ratio);
 	dev_info(ts->dev, "%s: TOUCH INFO updated\n", __func__);
 
 	return 0;
+}
+
+/**
+ * himax_mcu_resend_cmd_func() - Resend command collection
+ * @ts: Himax touch screen data
+ *
+ * This function is used to collect commands that need to be resent to TPIC after
+ * firmware restore. Usually we put system configuration status FW need to know
+ * after FW restore from system resume, firmware update or esd recovery. Currently,
+ * we put cable status here.
+ *
+ * return: 0 on success, negative error code on failure
+ */
+static int himax_mcu_resend_cmd_func(struct himax_ts_data *ts)
+{
+	return himax_cable_detect_func(ts, true);
 }
 
 /**
@@ -1626,7 +2239,7 @@ static int himax_sram_write_crc_check(struct himax_ts_data *ts, u32 addr, const 
 			return ret;
 		}
 		dev_info(ts->dev, "%s: HW CRC %s in %u time\n", __func__,
-		  crc == 0 ? "OK" : "Fail", retry_cnt);
+			 crc == 0 ? "OK" : "Fail", retry_cnt);
 
 		if (crc == 0)
 			break;
@@ -1740,11 +2353,11 @@ static int himax_zf_part_info(const struct firmware *fw, struct himax_ts_data *t
 		cfg_sz = cfg_sz + 4 - (cfg_sz % 4);
 
 	dev_info(ts->dev, "%s: main code sz = %d, config sz = %d\n", __func__,
-	  info[0].write_size, cfg_sz);
+		 info[0].write_size, cfg_sz);
 	/* config size should be smaller than DSRAM size */
 	if (cfg_sz > ts->chip_max_dsram_size) {
 		dev_err(ts->dev, "%s: config size error[%d, %u]!!\n", __func__,
-		  cfg_sz, ts->chip_max_dsram_size);
+			cfg_sz, ts->chip_max_dsram_size);
 		ret = -EINVAL;
 		goto alloc_cfg_buffer_failed;
 	}
@@ -1776,7 +2389,7 @@ static int himax_zf_part_info(const struct firmware *fw, struct himax_ts_data *t
 	for (retry_cnt = 0; retry_cnt < retry_limit; retry_cnt++) {
 		/* Write hole cfg data to DSRAM */
 		dev_info(ts->dev, "%s: Write cfg to SRAM - total write size = %d\n",
-		  __func__, cfg_sz);
+			 __func__, cfg_sz);
 		ret = himax_mcu_register_write(ts, sram_min, ts->zf_update_cfg_buffer, cfg_sz);
 		if (ret < 0) {
 			dev_err(ts->dev, "%s: write cfg to SRAM fail\n", __func__);
@@ -1795,7 +2408,7 @@ static int himax_zf_part_info(const struct firmware *fw, struct himax_ts_data *t
 
 		if (cfg_crc_hw != cfg_crc_sw)
 			dev_err(ts->dev, "%s: Cfg CRC FAIL, HWCRC = %X, SWCRC = %X, retry = %u\n",
-			  __func__, cfg_crc_hw, cfg_crc_sw, retry_cnt);
+				__func__, cfg_crc_hw, cfg_crc_sw, retry_cnt);
 		else
 			break;
 	}
@@ -1805,6 +2418,10 @@ static int himax_zf_part_info(const struct firmware *fw, struct himax_ts_data *t
 		ret = -EINVAL;
 		goto crc_not_match;
 	}
+
+	/* write back system config */
+	if (himax_mcu_resend_cmd_func(ts))
+		dev_warn(ts->dev, "%s: failed to resend config!\n", __func__);
 
 crc_not_match:
 crc_failed:
@@ -1865,6 +2482,8 @@ static int himax_mcu_firmware_update_zf(const struct firmware *fw, struct himax_
 static int himax_zf_reload_from_file(char *file_name, struct himax_ts_data *ts)
 {
 	int ret;
+	u32 fw_load_cnt;
+	const u32 fw_load_limit = 3;
 	const struct firmware *fw;
 
 	if (!mutex_trylock(&ts->zf_update_lock)) {
@@ -1876,23 +2495,71 @@ static int himax_zf_reload_from_file(char *file_name, struct himax_ts_data *ts)
 	ret = request_firmware(&fw, file_name, ts->dev);
 	if (ret < 0) {
 		dev_err(ts->dev, "%s: request firmware fail, code[%d]!!\n", __func__, ret);
-		goto load_firmware_error;
+		goto request_firmware_error;
 	}
 
-	ret = himax_mcu_firmware_update_zf(fw, ts);
-	release_firmware(fw);
-	if (ret < 0)
-		goto load_firmware_error;
+	for (fw_load_cnt = 0; fw_load_cnt < fw_load_limit; fw_load_cnt++) {
+		ret = himax_mcu_firmware_update_zf(fw, ts);
+		if (ret < 0)
+			goto load_firmware_error;
 
-	ret = himax_disable_fw_reload(ts);
-	if (ret < 0)
-		goto load_firmware_error;
-	ret = himax_mcu_power_on_init(ts);
+		ret = himax_disable_fw_reload(ts);
+		if (ret < 0)
+			goto disable_fw_reload_error;
 
+		ret = himax_mcu_power_on_init(ts);
+		if (ret == -EAGAIN)
+			dev_err(ts->dev, "%s: initialize error, try reload FW.\n", __func__);
+		else
+			break;
+	}
+
+disable_fw_reload_error:
 load_firmware_error:
+	release_firmware(fw);
+request_firmware_error:
 	mutex_unlock(&ts->zf_update_lock);
 
 	return ret;
+}
+
+/**
+ * himax_input_check() - Check the interrupt data
+ * @ts: Himax touch screen data
+ * @buf: Buffer of interrupt data
+ *
+ * This function is used to check the interrupt data. The function will check
+ * the interrupt data to see if it is normal or abnormal. If the interrupt data
+ * is all the same, it will return HIMAX_TS_ABNORMAL_PATTERN, otherwise, it will
+ * return HIMAX_TS_REPORT_DATA.
+ *
+ * Return: HIMAX_TS_ABNORMAL_PATTERN when all data is the same, HIMAX_TS_REPORT_DATA
+ * when data is normal.
+ */
+static int himax_input_check(struct himax_ts_data *ts, u8 *buf)
+{
+	int i;
+	int length;
+	int same_cnt = 1;
+
+	/* Check all interrupt data */
+	length = ts->touch_data_sz;
+	if (!length)
+		return HIMAX_TS_REPORT_DATA;
+
+	for (i = 1; i < length; i++) {
+		if (buf[i] == buf[i - 1])
+			same_cnt++;
+		else
+			same_cnt = 1;
+	}
+
+	if (same_cnt == length) {
+		dev_warn(ts->dev, "%s: [HIMAX TP MSG] Detected abnormal input pattern\n", __func__);
+		return HIMAX_TS_ABNORMAL_PATTERN;
+	}
+
+	return HIMAX_TS_REPORT_DATA;
 }
 
 /**
@@ -1979,6 +2646,129 @@ static void himax_hid_close(struct hid_device *hid)
 }
 
 /**
+ * free_firmware - Free the firmware data for hidraw run-time update
+ * @ts: Himax touch screen data
+ * @fw: Firmware data
+ *
+ * The function is used to free the firmware data for hidraw run-time update.
+ *
+ * Return: None
+ */
+static void free_firmware(struct himax_ts_data *ts, struct firmware *fw)
+{
+	if (fw) {
+		devm_kfree(ts->dev, fw->data);
+		devm_kfree(ts->dev, fw->priv);
+		devm_kfree(ts->dev, fw);
+	}
+}
+
+/**
+ * himax_hid_load_user_firmware() - Load the firmware data for hidraw run-time update
+ * @ts: Himax touch screen data
+ * @fwdata: Firmware data, usually partial due to ioctl operation
+ * @sz: Size of the firmware data
+ *
+ * The function is used to load the firmware data for hidraw run-time update. The FW data
+ * is loaded to the hid_req_cfg.fw->data buffer. The function will check if the FW data
+ * is complete, if it is complete, it will return HIMAX_LOAD_FIRMWARE_DONE, otherwise, it
+ * will return HIMAX_LOAD_FIRMWARE_ONGOING. Due to IOCTL operation, the FW data is
+ * usually part of the FW image and need to be combined to a complete FW image.
+ *
+ * Return: HIMAX_LOAD_FIRMWARE_DONE when the FW data is complete, HIMAX_LOAD_FIRMWARE_ONGOING
+ * when the FW data is not complete
+ */
+static int himax_hid_load_user_firmware(struct himax_ts_data *ts, u8 *fwdata, size_t sz)
+{
+	if (ts->hid_req_cfg.fw) {
+		/*
+		 * if size is equal to complete FW image size, means new FW is be uploading
+		 * then free the old FW. FW image size is equal to the size of the flash.
+		 */
+		if (ts->hid_req_cfg.fw->size == ts->ic_data.bl_size) {
+			dev_info(ts->dev, "%s: free old fw\n", __func__);
+			free_firmware(ts, ts->hid_req_cfg.fw);
+			ts->hid_req_cfg.fw = NULL;
+		}
+	}
+
+	/* if no FW data, allocate new firmware structure and FW image data space */
+	if (!ts->hid_req_cfg.fw) {
+		ts->hid_req_cfg.fw = devm_kzalloc(ts->dev, sizeof(*ts->hid_req_cfg.fw), GFP_KERNEL);
+		if (!ts->hid_req_cfg.fw)
+			return -ENOMEM;
+
+		ts->hid_req_cfg.fw->data = devm_kzalloc(ts->dev, ts->ic_data.bl_size, GFP_KERNEL);
+		if (!ts->hid_req_cfg.fw->data) {
+			devm_kfree(ts->dev, ts->hid_req_cfg.fw);
+			ts->hid_req_cfg.fw = NULL;
+			return -ENOMEM;
+		}
+	}
+
+	/* copy the FW data to the FW image buffer, exclude the ID byte */
+	memcpy((u8 *)ts->hid_req_cfg.fw->data + ts->hid_req_cfg.fw->size,
+	       (u8 *)fwdata + 1, sz - 1);
+	ts->hid_req_cfg.fw->size += sz - 1;
+	/* When accumlate size is equal to FW image size, means transfer is completed */
+	if (ts->hid_req_cfg.fw->size == ts->ic_data.bl_size) {
+		dev_info(ts->dev, "%s: load firmware done\n", __func__);
+		return HIMAX_LOAD_FIRMWARE_DONE;
+	}
+
+	return HIMAX_LOAD_FIRMWARE_ONGOING;
+}
+
+/**
+ * himax_usi_write_cmd() - Write USI command to IC sram
+ * @ts: Himax touch screen data
+ * @cmd: USI command from user-space through HIDRAW
+ *
+ * This function write USI command from user-space to IC SRAM. It check the corresponding
+ * address data first, if they equals all zero in size of himax_usi_cmd. It means FW is ready
+ * to receive next USI command, FW will clean this address when it processed the command.
+ * Then we just write the command to this address for FW to process.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int himax_usi_write_cmd(struct himax_ts_data *ts, struct himax_usi_cmd *cmd)
+{
+	int ret;
+	u32 retry_cnt;
+	const u32 retry_limit = 3;
+	struct himax_usi_cmd tmp;
+	const struct himax_usi_cmd ready_to_write = { 0 };
+
+	for (retry_cnt = 0; retry_cnt < retry_limit; retry_cnt++) {
+		ret = himax_mcu_register_read(ts, HIMAX_DSRAM_ADDR_STYLUS_CMD, (u8 *)&tmp,
+					      sizeof(struct himax_usi_cmd));
+		if (ret < 0) {
+			dev_err(ts->dev, "%s: read USI cmd fail\n", __func__);
+			return ret;
+		}
+
+		if (memcmp(&tmp, &ready_to_write, sizeof(struct himax_usi_cmd)) != 0)
+			usleep_range(1000, 2000);
+		else
+			break;
+	}
+
+	if (retry_cnt == retry_limit) {
+		dev_err(ts->dev, "%s: FW is not ready to receive USI command\n", __func__);
+		return -EBUSY;
+	}
+
+	ret = himax_mcu_register_write(ts, HIMAX_DSRAM_ADDR_STYLUS_CMD, (u8 *)cmd,
+				       sizeof(struct himax_usi_cmd));
+	if (ret < 0) {
+		dev_err(ts->dev, "%s: write USI cmd fail\n", __func__);
+		return ret;
+	}
+
+	return 0;
+}
+
+/**
  * himax_hid_get_raw_report - Process hidraw GET REPORT operation
  * @hid: HID device
  * @reportnum: Report ID
@@ -1994,6 +2784,22 @@ static void himax_hid_close(struct hid_device *hid)
  * the length of data in the buf, passed by user program. The report_type is
  * not used in this driver. We currently support the following report number:
  * - HIMAX_ID_CONTACT_COUNT: Report the maximum number of touch points
+ * - HIMAX_ID_CFG: Report the configuration of the HID device
+ * - HIMAX_ID_FW_UPDATE_HANDSHAKING: Report the handshake status of the FW update
+ * - HIMAX_ID_SELF_TEST: Report the self test status
+ * - HIMAX_ID_TOUCH_MONITOR: Report the touch data
+ * - HIMAX_ID_TOUCH_MONITOR_SEL: Report current touch data type
+ * - HIMAX_ID_REG_RW: Report the register read data
+ * - HIMAX_ID_INPUT_RD_DE: Report current report descriptor disable state
+ * - HIMAX_ID_FW_UPDATE: Dummy report return ok only
+ * - HIMAX_ID_USI_COLOR: Report the stylus color data
+ * - HIMAX_ID_USI_WIDTH: Report the stylus width data
+ * - HIMAX_ID_USI_STYLE: Report the stylus style data
+ * - HIMAX_ID_USI_BUTTONS: Report the stylus buttons data {barrel, side, eraser}
+ * - HIMAX_ID_USI_FIRMWARE: Report the stylus firmware version
+ * - HIMAX_ID_USI_PROTOCOL: Report the stylus protocol version
+ * - HIMAX_ID_USI_TRANSDUCER: Report 0, write only attribute
+ * - HIMAX_ID_WINDOWS_BLOB_VALID: Report the windows blob data
  * Case not listed here will return -EINVAL.
  *
  * Return: The length of the data in the buf on success, negative error code
@@ -2003,7 +2809,11 @@ static int himax_hid_get_raw_report(const struct hid_device *hid,
 				    size_t len, unsigned char report_type)
 {
 	int ret;
+	const u8 data_mask = GENMASK(7, 0);
+	u32 tmp_data;
 	struct himax_ts_data *ts;
+	struct himax_usi_info usi_info;
+	union himax_dword_data *tmp;
 
 	ts = hid->driver_data;
 	if (!ts) {
@@ -2018,10 +2828,572 @@ static int himax_hid_get_raw_report(const struct hid_device *hid,
 		buf[1] = ts->ic_data.max_point;
 		ret = len;
 		break;
+	case HIMAX_ID_CFG:
+		buf[0] = HIMAX_ID_CFG;
+		memcpy(buf + HIMAX_HID_ID_SZ, &ts->hid_info, sizeof(struct himax_hid_info));
+		ret = len;
+		break;
+	/*
+	 * User check FW update status, the correct user update flow is:
+	 * 1. set parameter to HIMAX_HID_FW_UPDATE_MAIN_CMD(0x55), send by
+	 *    HIMAX_ID_FW_UPDATE_HANDSHAKING
+	 * 2. get HIMAX_ID_FW_UPDATE_HANDSHAKING see if status is ready to send FW
+	 * 3. ready, send FW content by HIMAX_ID_FW_UPDATE
+	 * 4. send complete, get HIMAX_ID_FW_UPDATE_HANDSHAKING see if status OK
+	 * 5. by g_dummy_main_code, send 2 parts of main code which we don't use
+	 * 6. tool start sending BL part when status is HIMAX_FWUP_BL_READY
+	 * 7. FW image receive by himax_hid_load_user_firmware() and update
+	 * 8. report hid_info.bl_mapping.cmd which is HIMAX_HID_FW_UPDATE_BL_CMD if tool check.
+	 *    Which means FW transfer complete.
+	 */
+	case HIMAX_ID_FW_UPDATE_HANDSHAKING:
+		/* Already in handshake mode */
+		if (ts->hid_req_cfg.processing_id == HIMAX_ID_FW_UPDATE_HANDSHAKING) {
+			/* Last set command is Bootloader update */
+			if (ts->hid_req_cfg.handshake_set == ts->hid_info.bl_mapping.cmd) {
+				ts->hid_req_cfg.handshake_get = ts->hid_info.bl_mapping.cmd;
+			/* Last set command is main code start */
+			} else if (ts->hid_req_cfg.handshake_set == HIMAX_HID_FW_UPDATE_MAIN_CMD) {
+				/*
+				 * Just report part 0 is ready for update, rest data xferred
+				 * size to 0
+				 */
+				ts->hid_req_cfg.handshake_get = g_dummy_main_code[0].cmd;
+				ts->hid_req_cfg.current_size = 0;
+			/* Last set command is main code part 0 start */
+			} else if (ts->hid_req_cfg.handshake_set == g_dummy_main_code[0].cmd) {
+				/* when part 0 data transfer complete */
+				if (ts->hid_req_cfg.current_size >= g_dummy_main_code[0].unit_sz) {
+					/*
+					 * Just report part 1 is ready for update, reset xferred
+					 * data size to 0
+					 */
+					ts->hid_req_cfg.handshake_get = g_dummy_main_code[1].cmd;
+					ts->hid_req_cfg.current_size = 0;
+				}
+			/* Last set command is main code part 1 start */
+			} else if (ts->hid_req_cfg.handshake_set == g_dummy_main_code[1].cmd) {
+				/* Part 1 xferred completed, request BL part */
+				if (ts->hid_req_cfg.current_size >= g_dummy_main_code[1].unit_sz) {
+					ts->hid_req_cfg.handshake_get = HIMAX_FWUP_BL_READY;
+					ts->hid_req_cfg.current_size = 0;
+				}
+			/* Else just report no error */
+			} else {
+				ts->hid_req_cfg.handshake_get = HIMAX_FWUP_NO_ERROR;
+			}
+			buf[0] = HIMAX_ID_FW_UPDATE_HANDSHAKING;
+			buf[1] = ts->hid_req_cfg.handshake_get;
+		/* Last command is FW sending, report last get update status */
+		} else if (ts->hid_req_cfg.processing_id == HIMAX_ID_FW_UPDATE) {
+			/* Need to lock due to progress check can have only one */
+			mutex_lock(&ts->hid_ioctl_lock);
+			buf[0] = HIMAX_ID_FW_UPDATE_HANDSHAKING;
+			buf[1] = ts->hid_req_cfg.handshake_get;
+			mutex_unlock(&ts->hid_ioctl_lock);
+		/* Shouldn't be here if using right tool, just return ok */
+		} else {
+			buf[0] = HIMAX_ID_FW_UPDATE_HANDSHAKING;
+			buf[1] = HIMAX_FWUP_NO_ERROR;
+		}
+		ret = len;
+		break;
+	/* Self test status check, return the result left in himax_self_test() */
+	case HIMAX_ID_SELF_TEST:
+		mutex_lock(&ts->hid_ioctl_lock);
+		buf[0] = HIMAX_ID_SELF_TEST;
+		buf[1] = ts->hid_req_cfg.handshake_get;
+		/* turn on interrupt, in case tool fail to set HIMAX_INSPECT_BACK_NORMAL */
+		himax_int_enable(ts, true);
+		mutex_unlock(&ts->hid_ioctl_lock);
+		ret = len;
+		break;
+	case HIMAX_ID_TOUCH_MONITOR:
+		ret = himax_get_data(ts, &buf[2]);
+		if (ret == HIMAX_INSPECT_OK) {
+			/* get data succeed */
+			buf[0] = HIMAX_ID_TOUCH_MONITOR;
+			buf[1] = 0;
+			ret = len;
+		} else {
+			ret = 0;
+		}
+		break;
+	case HIMAX_ID_TOUCH_MONITOR_SEL:
+		ret = himax_mcu_diag_register_get(ts, &tmp_data);
+		if (!ret) {
+			/* return read back value of diag register */
+			buf[0] = HIMAX_ID_TOUCH_MONITOR_SEL;
+			buf[1] = tmp_data & data_mask;
+			ret = len;
+		} else {
+			ret = 0;
+		}
+		break;
+	case HIMAX_ID_REG_RW:
+		/*
+		 * standard REG RW, Address 4 bytes, Data 4 bytes all fixed
+		 * standard REG RW len = 10 : ID(1) | R/W(1) | ADDR(4) | DATA(4)
+		 */
+		if (len == 10 &&
+		    le32_to_cpup((u32 *)&buf[2]) != HIMAX_REG_TYPE_EXT_TYPE) {
+			/* standard REG RW */
+			ts->hid_req_cfg.reg_addr_sz = 4;
+			ts->hid_req_cfg.reg_data_sz = 4;
+			ts->hid_req_cfg.reg_addr.dword =
+				le32_to_cpup((u32 *)&buf[2]);
+			ret = himax_mcu_register_read(ts, ts->hid_req_cfg.reg_addr.dword,
+						      ts->hid_req_cfg.reg_data,
+						      ts->hid_req_cfg.reg_data_sz);
+			if (!ret) {
+				tmp = (union himax_dword_data *)ts->hid_req_cfg.reg_data;
+				tmp->dword = le32_to_cpu(tmp->dword);
+				buf[0] = HIMAX_ID_REG_RW;
+				/* Reg data at buf[6] */
+				memcpy(&buf[6], ts->hid_req_cfg.reg_data,
+				       ts->hid_req_cfg.reg_data_sz);
+				ret = len;
+			} else {
+				ret = 0;
+			}
+		/*
+		 * EXT type REG RW, Address 1 for AHB, 4 for SRAM/REG, Data 1~256
+		 * EXT REG RW len >= 9 : ID(1) | R/W(1) | EXT_HDR(4) | EXT_TYPE(1) | REG_ADDR(1/4)
+		 *			 | REG_DATA(1~256) => min 9, max 267
+		 */
+		} else if ((len >= 9) && (len <= (1 + HIMAX_HID_REG_SZ_MAX)) &&
+			(((union himax_dword_data *)&buf[2])->dword == HIMAX_REG_TYPE_EXT_TYPE)) {
+			switch (buf[6]) {
+			/* AHB type REG RW, Address 1, Data 1~256 */
+			case HIMAX_REG_TYPE_EXT_AHB:
+				ts->hid_req_cfg.reg_addr_sz = 1;
+				/*
+				 * Data length = total length from user space tool - ID(1) - R/W(1)
+				 *		 - EXT_HDR(4) - EXT_TYPE(1) - REG_ADDR(1)
+				 */
+				ts->hid_req_cfg.reg_data_sz = len - 1 - 1 - 4 - 1 - 1;
+				/* Reg addr at buf[7] */
+				ts->hid_req_cfg.reg_addr.dword = buf[7];
+				/* Call himax_read to read AHB register */
+				ret = himax_read(ts, ts->hid_req_cfg.reg_addr.dword,
+						 ts->hid_req_cfg.reg_data,
+						 ts->hid_req_cfg.reg_data_sz);
+				/* If read success, copy data to buf[8:] */
+				if (!ret) {
+					buf[0] = HIMAX_ID_REG_RW;
+					memcpy(&buf[8], ts->hid_req_cfg.reg_data,
+					       ts->hid_req_cfg.reg_data_sz);
+					ret = len;
+				}
+				break;
+			/* SRAM/REG type REG RW, Address 4, Data 1~256 */
+			case HIMAX_REG_TYPE_EXT_SRAM:
+				ts->hid_req_cfg.reg_addr_sz = 4;
+				/*
+				 * Data length = total length from user space tool - ID(1) - R/W(1)
+				 *		 - EXT_HDR(4) - EXT_TYPE(1) - REG_ADDR(4)
+				 */
+				ts->hid_req_cfg.reg_data_sz = len - 1 - 1 - 4 - 1 - 4;
+				/* Reg addr at buf[7:10] */
+				ts->hid_req_cfg.reg_addr.dword =
+					((union himax_dword_data *)&buf[7])->dword;
+				ret = himax_mcu_register_read(ts, ts->hid_req_cfg.reg_addr.dword,
+							      ts->hid_req_cfg.reg_data,
+							      ts->hid_req_cfg.reg_data_sz);
+				/* If read success, copy data to buf[11:] */
+				if (!ret) {
+					buf[0] = HIMAX_ID_REG_RW;
+					memcpy(&buf[11], ts->hid_req_cfg.reg_data,
+					       ts->hid_req_cfg.reg_data_sz);
+					ret = len;
+				} else {
+					ret = 0;
+				}
+				break;
+			default:
+				dev_err(ts->dev, "%s: Invalid ext type\n", __func__);
+				ret = -EINVAL;
+			}
+		} else {
+			dev_err(ts->dev, "%s: Invalid reg format!\n", __func__);
+			ret = -EINVAL;
+		}
+		break;
+	/* Report current report descriptor disable state */
+	case HIMAX_ID_INPUT_RD_DE:
+		buf[0] = HIMAX_ID_INPUT_RD_DE;
+		buf[1] = ts->hid_req_cfg.input_RD_de;
+		ret = len;
+		break;
+	/* HIMAX_ID_FW_UPDATE is for FW write only */
+	case HIMAX_ID_FW_UPDATE:
+		ret = 0;
+		break;
+	/* Report the stylus data */
+	case HIMAX_ID_USI_COLOR:
+		ret = himax_mcu_register_read(ts, HIMAX_DSRAM_ADDR_STYLUS_INFO, (u8 *)&usi_info,
+					      sizeof(struct himax_usi_info));
+		if (ret)
+			break;
+		buf[0] = HIMAX_ID_USI_COLOR;
+		buf[1] = usi_info.pen_transducer;
+		buf[2] = usi_info.pen_color;
+		buf[3] = usi_info.pen_color_locked;
+		ret = 4;
+		break;
+	case HIMAX_ID_USI_WIDTH:
+		ret = himax_mcu_register_read(ts, HIMAX_DSRAM_ADDR_STYLUS_INFO, (u8 *)&usi_info,
+					      sizeof(struct himax_usi_info));
+		if (ret)
+			break;
+		buf[0] = HIMAX_ID_USI_WIDTH;
+		buf[1] = usi_info.pen_transducer;
+		buf[2] = usi_info.pen_width;
+		buf[3] = usi_info.pen_width_locked;
+		ret = 4;
+		break;
+	case HIMAX_ID_USI_STYLE:
+		ret = himax_mcu_register_read(ts, HIMAX_DSRAM_ADDR_STYLUS_INFO, (u8 *)&usi_info,
+					      sizeof(struct himax_usi_info));
+		if (ret)
+			break;
+		buf[0] = HIMAX_ID_USI_STYLE;
+		buf[1] = usi_info.pen_transducer;
+		buf[2] = usi_info.pen_style;
+		buf[3] = usi_info.pen_style_locked;
+		ret = 4;
+		break;
+	case HIMAX_ID_USI_BUTTONS:
+		ret = himax_mcu_register_read(ts, HIMAX_DSRAM_ADDR_STYLUS_INFO, (u8 *)&usi_info,
+					      sizeof(struct himax_usi_info));
+		if (ret)
+			break;
+		buf[0] = HIMAX_ID_USI_BUTTONS;
+		buf[1] = usi_info.pen_transducer;
+		memcpy(&buf[2], usi_info.pen_buttons, 3);
+		ret = 5;
+		break;
+	case HIMAX_ID_USI_FIRMWARE:
+		ret = himax_mcu_register_read(ts, HIMAX_DSRAM_ADDR_STYLUS_INFO, (u8 *)&usi_info,
+					      sizeof(struct himax_usi_info));
+		if (ret)
+			break;
+		buf[0] = HIMAX_ID_USI_FIRMWARE;
+		buf[1] = usi_info.pen_transducer;
+		memcpy(&buf[2], usi_info.pen_firmware_version, 12);
+		ret = 14;
+		break;
+	case HIMAX_ID_USI_PROTOCOL:
+		ret = himax_mcu_register_read(ts, HIMAX_DSRAM_ADDR_STYLUS_INFO, (u8 *)&usi_info,
+					      sizeof(struct himax_usi_info));
+		if (ret)
+			break;
+		buf[0] = HIMAX_ID_USI_PROTOCOL;
+		buf[1] = usi_info.pen_transducer;
+		buf[2] = usi_info.pen_protocol_major;
+		buf[3] = usi_info.pen_protocol_minor;
+		ret = 4;
+		break;
+	case HIMAX_ID_USI_TRANSDUCER:
+		ret = 0;
+		break;
+	/* Report the windows blob data */
+	case HIMAX_ID_WINDOWS_BLOB_VALID:
+		buf[0] = HIMAX_ID_WINDOWS_BLOB_VALID;
+		memcpy(buf + 1, g_windows_blob_validation_key,
+		       sizeof(g_windows_blob_validation_key));
+		ret = len;
+		break;
 	default:
 		dev_err(ts->dev, "%s: Invalid report number\n", __func__);
 		ret = -EINVAL;
 		break;
+	};
+
+	return ret;
+}
+
+/**
+ * himax_hid_set_raw_report() - process hidraw SET REPORT operation
+ * @hid: HID device
+ * @reportnum: Report ID
+ * @buf: Buffer for communication
+ * @len: Length of data in the buffer
+ * @report_type: Report type
+ *
+ * The function for hid_ll_driver.set_raw_report to handle the HIDRAW ioctl
+ * set report request. The report number to handle is based on the report
+ * descriptor of the HID device. The buf is used to communicate with user
+ * program, user pass the ID and parameters to the driver use this buf, and
+ * the driver will return the result to user also use this buf. The len is
+ * the length of data in the buf, passed by user program. The report_type is
+ * not used in this driver. We currently support the following report number:
+ * - HIMAX_ID_FW_UPDATE: Collect the firmware data and update the firmware
+ * - HIMAX_ID_FW_UPDATE_HANDSHAKING: Handshaking status of the FW update
+ * - HIMAX_ID_SELF_TEST: Start the specified self test
+ * - HIMAX_ID_TOUCH_MONITOR_SEL: Set the touch data type, part of the self test
+ * - HIMAX_ID_REG_RW: Write date to specified register/sram
+ * - HIMAX_ID_INPUT_RD_DE: Set the report descriptor disable state
+ * - HIMAX_ID_CONTACT_COUNT: Not support set report, return 0
+ * - HIMAX_ID_CFG: Not support set report, return 0
+ * - HIMAX_ID_TOUCH_MONITOR: Not support set report, return 0
+ * - HIMAX_ID_USI_COLOR: USI color report ID
+ * - HIMAX_ID_USI_WIDTH: USI width report ID
+ * - HIMAX_ID_USI_STYLE: USI style report ID
+ * - HIMAX_ID_USI_BUTTONS: USI buttons report ID
+ * - HIMAX_ID_USI_FIRMWARE: Not support set report, return 0
+ * - HIMAX_ID_USI_PROTOCOL: Not support set report, return 0
+ * - HIMAX_ID_USI_TRANSDUCER: USI transducer report ID for SET
+ * - HIMAX_ID_WINDOWS_BLOB_VALID: Not support set report, return 0
+ * Case not listed here will return -EINVAL.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int himax_hid_set_raw_report(const struct hid_device *hid,
+				    unsigned char reportnum, __u8 *buf, size_t len,
+				    unsigned char report_type)
+{
+	int ret;
+	int i;
+	struct himax_ts_data *ts;
+	struct himax_usi_cmd usi_cmd;
+	union himax_dword_data *tmp_data;
+
+	ts = hid->driver_data;
+	if (!ts) {
+		dev_err(ts->dev, "hid->driver_data is NULL");
+		return -EINVAL;
+	}
+
+	switch (reportnum) {
+	case HIMAX_ID_FW_UPDATE:
+		if (ts->hid_req_cfg.processing_id == HIMAX_ID_FW_UPDATE_HANDSHAKING) {
+			if (ts->hid_req_cfg.handshake_get == g_dummy_main_code[0].cmd) {
+				ts->hid_req_cfg.handshake_set = g_dummy_main_code[0].cmd;
+				ts->hid_req_cfg.current_size += len - 1;
+				ret = 0;
+				break;
+			} else if (ts->hid_req_cfg.handshake_get == g_dummy_main_code[1].cmd) {
+				ts->hid_req_cfg.handshake_set = g_dummy_main_code[1].cmd;
+				ts->hid_req_cfg.current_size += len - 1;
+				ret = 0;
+				break;
+			}
+		}
+		ret = himax_hid_load_user_firmware(ts, buf, len);
+		if (ret < 0) {
+			dev_err(ts->dev, "%s: load user firmware failed\n", __func__);
+			break;
+		} else if (ret == HIMAX_LOAD_FIRMWARE_ONGOING) {
+			ret = 0;
+			break;
+		}
+		dev_info(ts->dev, "%s: load user firmware succeeded\n", __func__);
+
+		ts->hid_req_cfg.processing_id = HIMAX_ID_FW_UPDATE;
+		ts->hid_req_cfg.handshake_get = HIMAX_FWUP_FLASH_PROG_ERROR;
+		himax_int_enable(ts, false);
+		ret = hx83102j_sense_off(ts, false);
+		if (ret)
+			break;
+		/* Lock it, free after re-init complete */
+		mutex_lock(&ts->hid_ioctl_lock);
+		/* Need to remove HID and probe again, queue re-init work and return immediately */
+		schedule_delayed_work(&ts->initial_work, msecs_to_jiffies(0));
+		ret = 0;
+		break;
+	case HIMAX_ID_FW_UPDATE_HANDSHAKING:
+		ts->hid_req_cfg.processing_id = HIMAX_ID_FW_UPDATE_HANDSHAKING;
+		ts->hid_req_cfg.handshake_set = buf[1];
+		ret = 0;
+		break;
+	case HIMAX_ID_SELF_TEST:
+		ts->hid_req_cfg.processing_id = HIMAX_ID_SELF_TEST;
+		ts->hid_req_cfg.handshake_set = buf[1];
+		dev_info(ts->dev, "%s: Initial self test\n", __func__);
+		switch (buf[1]) {
+		case HIMAX_HID_SELF_TEST_SHORT:
+			ts->hid_req_cfg.self_test_type = HIMAX_INSPECT_SHORT;
+			break;
+		case HIMAX_HID_SELF_TEST_OPEN:
+			ts->hid_req_cfg.self_test_type = HIMAX_INSPECT_OPEN;
+			break;
+		case HIMAX_HID_SELF_TEST_MICRO_OPEN:
+			ts->hid_req_cfg.self_test_type = HIMAX_INSPECT_MICRO_OPEN;
+			break;
+		case HIMAX_HID_SELF_TEST_RAWDATA:
+			ts->hid_req_cfg.self_test_type = HIMAX_INSPECT_RAWDATA;
+			break;
+		case HIMAX_HID_SELF_TEST_NOISE:
+			ts->hid_req_cfg.self_test_type = HIMAX_INSPECT_ABS_NOISE;
+			break;
+		case HIMAX_HID_SELF_TEST_RESET:
+			ts->hid_req_cfg.self_test_type = HIMAX_INSPECT_BACK_NORMAL;
+			break;
+		default:
+			dev_info(ts->dev, "Not support self test type, set to default(HIMAX_INSPECT_BACK_NORMAL)");
+			ts->hid_req_cfg.self_test_type = HIMAX_INSPECT_BACK_NORMAL;
+		}
+		/* Back to normal TP report mode */
+		if (ts->hid_req_cfg.self_test_type == HIMAX_INSPECT_BACK_NORMAL) {
+			ret = himax_switch_data_type(ts, HIMAX_INSPECT_BACK_NORMAL);
+			if (ret < 0) {
+				dev_err(ts->dev, "%s: switch data type to normal failed\n",
+					__func__);
+				break;
+			}
+
+			himax_int_enable(ts, false);
+			ret = himax_disable_fw_reload(ts);
+			if (ret < 0) {
+				dev_err(ts->dev, "%s: disable FW reload failed\n", __func__);
+				break;
+			}
+
+			ret = himax_mcu_power_on_init(ts);
+			if (ret < 0) {
+				dev_err(ts->dev, "%s: power on init failed\n", __func__);
+				break;
+			}
+
+			himax_int_enable(ts, true);
+			ret = 0;
+			break;
+		}
+		/* Lock it, free after self test finished */
+		mutex_lock(&ts->hid_ioctl_lock);
+		/* Disable interrupt, all work should be AP controlled */
+		himax_int_enable(ts, false);
+		/* Queue self test work, unblock hidraw interface */
+		queue_delayed_work(ts->himax_hidraw_wq, &ts->work_self_test,
+				   msecs_to_jiffies(0));
+		ret = 0;
+		break;
+	case HIMAX_ID_TOUCH_MONITOR_SEL:
+		for (i = 0; i < HIMAX_HID_RAW_DATA_TYPE_MAX; i++) {
+			if (buf[1] == g_himax_hid_raw_data_type[i]) {
+				himax_mcu_diag_register_set(ts, buf[1]);
+				break;
+			}
+		}
+		if (i == HIMAX_HID_RAW_DATA_TYPE_MAX) {
+			dev_err(ts->dev, "%s: Not support data type\n", __func__);
+			ret = -EINVAL;
+			break;
+		}
+		ts->hid_req_cfg.processing_id = HIMAX_ID_TOUCH_MONITOR_SEL;
+		ts->hid_req_cfg.handshake_set = buf[1];
+		ret = 0;
+		break;
+	case HIMAX_ID_REG_RW:
+		/*
+		 * standard REG RW, Address 4 bytes, Data 4 bytes all fixed
+		 * standard REG RW len = 10 : ID(1) | R/W(1) | ADDR(4) | DATA(4)
+		 */
+		if (len == 10 &&
+		    ((union himax_dword_data *)&buf[2])->dword != HIMAX_REG_TYPE_EXT_TYPE) {
+			/* standard REG RW */
+			if (buf[1] == HIMAX_HID_REG_READ) {
+				ret = 0;
+				break;
+			}
+			ts->hid_req_cfg.reg_addr_sz = 4;
+			ts->hid_req_cfg.reg_data_sz = 4;
+			ts->hid_req_cfg.reg_addr.dword =
+				((union himax_dword_data *)&buf[2])->dword;
+			memcpy(ts->hid_req_cfg.reg_data, &buf[6], 4);
+			tmp_data = (union himax_dword_data *)(ts->hid_req_cfg.reg_data);
+			tmp_data->dword = cpu_to_le32(tmp_data->dword);
+			ret = himax_mcu_register_write(ts,
+						       ts->hid_req_cfg.reg_addr.dword,
+						       ts->hid_req_cfg.reg_data, 4);
+		/*
+		 * EXT type REG RW, Address 1 for AHB, 4 for SRAM/REG, Data 1~256
+		 * EXT REG RW len >= 9 : ID(1) | R/W(1) | EXT_HDR(4) | EXT_TYPE(1) | REG_ADDR(1/4)
+		 *			 | REG_DATA(1~256) => min 9, max 267
+		 */
+		} else if ((len >= 9) && (len <= (1 + HIMAX_HID_REG_SZ_MAX)) &&
+			(((union himax_dword_data *)&buf[2])->dword == HIMAX_REG_TYPE_EXT_TYPE)) {
+			if (buf[1] == HIMAX_HID_REG_READ) {
+				ret = 0;
+				break;
+			}
+			switch (buf[6]) {
+			/* AHB type REG RW, Address 1, Data 1~256 */
+			case HIMAX_REG_TYPE_EXT_AHB:
+				ts->hid_req_cfg.reg_addr_sz = 1;
+				/*
+				 * Data length = total length from user space tool - ID(1) - R/W(1)
+				 *		 - EXT_HDR(4) - EXT_TYPE(1) - REG_ADDR(1)
+				 */
+				ts->hid_req_cfg.reg_data_sz = len - 1 - 1 - 4 - 1 - 1;
+				ts->hid_req_cfg.reg_addr.dword = buf[7];
+				memcpy(ts->hid_req_cfg.reg_data, &buf[8],
+				       ts->hid_req_cfg.reg_data_sz);
+				ret = himax_write(ts, ts->hid_req_cfg.reg_addr.dword, NULL,
+						  ts->hid_req_cfg.reg_data,
+						  ts->hid_req_cfg.reg_data_sz);
+				break;
+			/* SRAM/REG type REG RW, Address 4, Data 1~256 */
+			case HIMAX_REG_TYPE_EXT_SRAM:
+				ts->hid_req_cfg.reg_addr_sz = 4;
+				/*
+				 * Data length = total length from user space tool - ID(1) - R/W(1)
+				 *		 - EXT_HDR(4) - EXT_TYPE(1) - REG_ADDR(4)
+				 */
+				ts->hid_req_cfg.reg_data_sz = len - 1 - 1 - 4 - 1 - 4;
+				ts->hid_req_cfg.reg_addr.dword =
+					((union himax_dword_data *)&buf[7])->dword;
+				memcpy(ts->hid_req_cfg.reg_data, &buf[11],
+				       ts->hid_req_cfg.reg_data_sz);
+				ret = himax_mcu_register_write(ts,
+							       ts->hid_req_cfg.reg_addr.dword,
+							       ts->hid_req_cfg.reg_data,
+							       ts->hid_req_cfg.reg_data_sz);
+				break;
+			default:
+				dev_err(ts->dev, "%s: Invalid ext type\n", __func__);
+				ret = -EINVAL;
+				break;
+			}
+		} else {
+			dev_err(ts->dev, "%s: Invalid reg format!\n", __func__);
+			ret = -EINVAL;
+			break;
+		}
+		ts->hid_req_cfg.processing_id = HIMAX_ID_REG_RW;
+		ts->hid_req_cfg.handshake_set = ts->hid_req_cfg.reg_addr.dword;
+		break;
+	case HIMAX_ID_INPUT_RD_DE:
+		ts->hid_req_cfg.processing_id = HIMAX_ID_INPUT_RD_DE;
+		ts->hid_req_cfg.handshake_set = !!buf[1];
+		if (ts->hid_req_cfg.input_RD_de != (!!buf[1])) {
+			ts->hid_req_cfg.input_RD_de = !!buf[1];
+			/* Re-register HID to update report descriptor */
+			queue_delayed_work(ts->himax_hidraw_wq, &ts->work_hid_update,
+					   msecs_to_jiffies(0));
+		}
+		ret = 0;
+		break;
+	case HIMAX_ID_USI_COLOR:
+	case HIMAX_ID_USI_WIDTH:
+	case HIMAX_ID_USI_STYLE:
+	case HIMAX_ID_USI_BUTTONS:
+	case HIMAX_ID_USI_TRANSDUCER:
+		memset(&usi_cmd, 0, sizeof(struct himax_usi_cmd));
+		memcpy(&usi_cmd, buf, min(len, sizeof(struct himax_usi_cmd)));
+		ret = himax_usi_write_cmd(ts, &usi_cmd);
+		break;
+	case HIMAX_ID_USI_FIRMWARE:
+	case HIMAX_ID_USI_PROTOCOL:
+	case HIMAX_ID_CONTACT_COUNT:
+	case HIMAX_ID_CFG:
+	case HIMAX_ID_TOUCH_MONITOR:
+	case HIMAX_ID_WINDOWS_BLOB_VALID:
+		ret = 0;
+		break;
+	default:
+		ret = -EINVAL;
 	};
 
 	return ret;
@@ -2049,6 +3421,13 @@ static int himax_raw_request(struct hid_device *hid, unsigned char reportnum, __
 	switch (reqtype) {
 	case HID_REQ_GET_REPORT:
 		ret = himax_hid_get_raw_report(hid, reportnum, buf, len, rtype);
+		break;
+	case HID_REQ_SET_REPORT:
+		if (buf[0] != reportnum) {
+			ret = -EINVAL;
+			break;
+		}
+		ret = himax_hid_set_raw_report(hid, reportnum, buf, len, rtype);
 		break;
 	default:
 		ret = -EINVAL;
@@ -2137,17 +3516,240 @@ err_hid_data:
  * @ts: Himax touch screen data
  *
  * This function is used to remove the HID device.
+ * It will free the firmware space if it is not NULL.
  *
  * Return: None
  */
 static void himax_hid_remove(struct himax_ts_data *ts)
 {
+	mutex_lock(&ts->hid_ioctl_lock);
 	if (ts && ts->hid)
 		hid_destroy_device(ts->hid);
 	else
-		return;
+		goto out;
 
 	ts->hid = NULL;
+	if (ts->hid_req_cfg.fw) {
+		dev_info(ts->dev, "%s: free fw\n", __func__);
+		free_firmware(ts, ts->hid_req_cfg.fw);
+		ts->hid_req_cfg.fw = NULL;
+	}
+out:
+	mutex_unlock(&ts->hid_ioctl_lock);
+}
+
+/**
+ * himax_mcu_ic_excp_check() - Check the exception type
+ * @ts: Himax touch screen data
+ * @buf: input buffer
+ *
+ * This function is used to categorize the exception type and report the exception
+ * event to caller. The event type is categorized into exception event and all zero
+ * event. The function will check the first byte of interrupt data only because
+ * previous function has already confirm all data is the same. If the 1st byte data
+ * is not zero then return HIMAX_TS_EXCP_EVENT. Otherwise, it will increment the
+ * global all zero event count and check if it reached exception threshold. If it
+ * reached, it will return HIMAX_TS_EXCP_EVENT. If it is not reached, it will return
+ * HIMAX_TS_ZERO_EVENT_CNT.
+ *
+ * return:
+ * - HIMAX_TS_EXCP_EVENT     : recovery is needed
+ * - HIMAX_TS_ZERO_EVENT_CNT : all zero event checked
+ */
+static int himax_mcu_ic_excp_check(struct himax_ts_data *ts, const u8 *buf)
+{
+	bool excp_flag = false;
+	const u32 all_zero_excp_event_threshold = 5;
+
+	switch (buf[0]) {
+	case 0x00:
+		dev_info(ts->dev, "%s: [HIMAX TP MSG]: EXCEPTION event checked - ALL 0x00\n",
+			 __func__);
+		excp_flag = false;
+		break;
+	default:
+		dev_info(ts->dev, "%s: [HIMAX TP MSG]: EXCEPTION event checked - All 0x%02X\n",
+			 __func__, buf[0]);
+		excp_flag = true;
+	}
+
+	if (!excp_flag) {
+		ts->excp_zero_event_count++;
+		dev_info(ts->dev, "%s: ALL Zero event %d times\n", __func__,
+			 ts->excp_zero_event_count);
+		if (ts->excp_zero_event_count == all_zero_excp_event_threshold) {
+			ts->excp_zero_event_count = 0;
+			return HIMAX_TS_EXCP_EVENT;
+		}
+
+		return HIMAX_TS_ZERO_EVENT_CNT;
+	}
+
+	ts->excp_zero_event_count = 0;
+
+	return HIMAX_TS_EXCP_EVENT;
+}
+
+/**
+ * himax_excp_hw_reset() - Do the ESD recovery
+ * @ts: Himax touch screen data
+ *
+ * This function is used to do the ESD recovery. It will remove the HID device,
+ * reload the firmware, and probe the HID device again. Because finger/stylus
+ * may stuck on the touch screen, it will remove the HID device first to avoid
+ * this situation.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int himax_excp_hw_reset(struct himax_ts_data *ts)
+{
+	int ret;
+
+	dev_info(ts->dev, "%s: START EXCEPTION Reset\n", __func__);
+	himax_hid_remove(ts);
+	ret = himax_zf_reload_from_file(ts->firmware_name, ts);
+	if (ret) {
+		dev_err(ts->dev, "%s: update FW fail, error: %d\n", __func__, ret);
+		return ret;
+	}
+
+	dev_info(ts->dev, "%s: update FW success\n", __func__);
+	ret = himax_hid_probe(ts);
+	if (ret) {
+		dev_err(ts->dev, "%s: hid probe fail, error: %d\n", __func__, ret);
+		return ret;
+	}
+	dev_info(ts->dev, "%s: END EXCEPTION Reset\n", __func__);
+
+	return 0;
+}
+
+/**
+ * himax_ts_event_check() - Check the abnormal interrupt data
+ * @ts: Himax touch screen data
+ * @buf: Interrupt data
+ *
+ * This function is used to check the abnormal interrupt data.
+ * If the data pattern matched the exception pattern, it will try to do
+ * the ESD recovery. For all zero data, it needs to be continuous reported
+ * for several times to trigger the ESD recovery(checked by himax_mcu_ic_excp_check())
+ *
+ * Return:
+ * - HIMAX_TS_EXCP_EVENT     : exception recovery event
+ * - HIMAX_TS_ZERO_EVENT_CNT : zero event count
+ * - HIMAX_TS_EXCP_REC_OK    : exception recovery done
+ * - HIMAX_TS_EXCP_REC_FAIL  : exception recovery error
+ */
+static int himax_ts_event_check(struct himax_ts_data *ts, const u8 *buf)
+{
+	int ret;
+
+	/* The first data read out right after chip reset is invalid. Drop it. */
+	if (ts->excp_reset_active) {
+		ts->excp_reset_active = false;
+		dev_info(ts->dev, "%s: Skip data after reset\n", __func__);
+
+		return HIMAX_TS_EXCP_REC_OK;
+	}
+
+	/* No data after reset, check exception pattern */
+	ret = himax_mcu_ic_excp_check(ts, buf);
+	switch (ret) {
+	/* Exception pattern matched, do recovery */
+	case HIMAX_TS_EXCP_EVENT:
+		/* Print debug message only, no check return */
+		himax_mcu_read_FW_status(ts);
+		ret = himax_excp_hw_reset(ts);
+		if (ret) {
+			dev_err(ts->dev, "%s: Recovery error!\n", __func__);
+			return HIMAX_TS_EXCP_REC_FAIL;
+		}
+		ts->excp_reset_active = true;
+		ret = HIMAX_TS_EXCP_EVENT;
+		break;
+	/* All zero event, but not reach reset threshold print debug message only */
+	case HIMAX_TS_ZERO_EVENT_CNT:
+		/* Print debug message only, no check return */
+		himax_mcu_read_FW_status(ts);
+		break;
+	}
+
+	return ret;
+}
+
+/**
+ * himax_err_ctrl() - ESD check and recovery
+ * @ts: Himax touch screen data
+ * @buf: Interrupt data
+ *
+ * This function is used to check the interrupt data. Use himax_input_check()
+ * to check the data. If the data is not valid, it will call himax_ts_event_check()
+ * to see if data match the exception pattern and do the ESD recovery when needed.
+ * If the data is valid, it will clear the exception counters and return
+ * HIMAX_TS_REPORT_DATA.
+ *
+ * Return:
+ * - HIMAX_TS_REPORT_DATA   : valid data
+ * - HIMAX_TS_EXCP_EVENT    : exception match
+ * - HIMAX_TS_ZERO_EVENT_CNT: zero frame event counted
+ * - HIMAX_TS_EXCP_REC_OK   : exception recovery done
+ * - HIMAX_TS_EXCP_REC_FAIL : exception recovery error
+ */
+static int himax_err_ctrl(struct himax_ts_data *ts, u8 *buf)
+{
+	int ret;
+
+	ret = himax_input_check(ts, buf);
+	if (ret == HIMAX_TS_ABNORMAL_PATTERN)
+		return himax_ts_event_check(ts, buf);
+
+	/* data check passed, clear excp counters */
+	ts->excp_zero_event_count = 0;
+	ts->excp_reset_active = false;
+
+	return ret;
+}
+
+/**
+ * heatmap_decompress_12bits() - Decompress 12bits heatmap data to 16bits
+ * @ts: Himax touch screen data
+ * @in_buf: Compressed heatmap data
+ * @target: Decompressed heatmap data
+ *
+ * This function is used to decompress the 12bits heatmap data to 16bits.
+ * The 12bits heatmap data is compressed in 3 bytes for 2 pixels, here we
+ * restore each 3 bytes to 4 bytes in the target buffer. the format of 12 bits:
+ * [value 1 low byte]|[value 2 low byte]|[value 1 high nibble][value 2 high nibble]
+ *   8 bits		8 bits		   4 bits		4 bits
+ * restored 16 bits:
+ * [high nibble][low byte] : mask 0x0FFF, MSB 4 bits are ignored
+ *
+ * Return: None
+ */
+static void heatmap_decompress_12bits(struct himax_ts_data *ts, u8 *in_buf, u8 *target)
+{
+	int i;
+	/* 1 byte for ID, else are HEATMAP headers */
+	const int in_offset = HIMAX_HEAT_MAP_INFO_SZ + 1;
+	const int heatmap_data_sz = ts->ic_data.rx_num * ts->ic_data.tx_num;
+	u8 *in_ptr;
+	const u8 h_nibble = GENMASK(7, 4);
+	const u8 l_nibble = GENMASK(3, 0);
+	u16 *target_ptr;
+
+	/* Copy headers to target buffer */
+	memcpy(target, in_buf, in_offset);
+	/* Restore 2 16bits raw data each time */
+	for (i = 0; i < heatmap_data_sz; i += 2) {
+		/* locate offset in in_buf, step 3 bytes each time */
+		in_ptr = &in_buf[in_offset + i * 3 / 2];
+		/* locate target offset, step 2 16bits each time */
+		target_ptr = (u16 *)&target[in_offset + i * 2];
+		/* 1st 16bits of 2 16bits raw data */
+		*target_ptr = (u16)in_ptr[0] | ((u16)(in_ptr[2] & h_nibble) << 4);
+		/* 2nd 16bits of 2 16bits raw data */
+		*(target_ptr + 1) = (u16)in_ptr[1] | (u16)(in_ptr[2] & l_nibble) << 8;
+	}
 }
 
 /**
@@ -2156,34 +3758,19 @@ static void himax_hid_remove(struct himax_ts_data *ts)
  *
  * This function is used to process the touch interrupt data. It will
  * call the himax_touch_get() to get the touch data.
+ * Check the data by calling the himax_err_ctrl() to see if the data is
+ * valid. If the data is not valid, it also process the ESD recovery.
  * If the hid is probed, it will call the himax_hid_report() to report the
  * touch data to the HID core. Due to the report data must match the HID
  * report descriptor, the size of report data is fixed. To prevent next report
  * data being contaminated by the previous data, all the data must be reported
  * wheather previous data is valid or not.
+ * The heatmap data will be decompressed by calling the heatmap_decompress_12bits()
+ * if heatmap is not encoded in 16bits, otherwise it will be copied directly.
  *
  * Return: HIMAX_TS_SUCCESS on success, negative error code in
  * himax_touch_report_status on failure
  */
-static void himax_decompress_heatmap(struct himax_ts_data *ts, const u8 *src)
-{
-	u32 i;
-	u32 count = ts->ic_data.rx_num * ts->ic_data.tx_num;
-	const u32 header_size = HIMAX_HEAT_MAP_INFO_SZ + 1;
-	u8 *dst = ts->heatmap_buf;
-
-	memcpy(dst, src, header_size);
-	for (i = 0; i < count; i += 2) {
-		const u8 *packed = src + header_size + i * 3 / 2;
-		u8 *unpacked = dst + header_size + i * 2;
-
-		unpacked[0] = packed[0];
-		unpacked[1] = packed[2] >> 4;
-		unpacked[2] = packed[1];
-		unpacked[3] = packed[2] & 0x0f;
-	}
-}
-
 static int himax_ts_operation(struct himax_ts_data *ts)
 {
 	int ret;
@@ -2193,21 +3780,35 @@ static int himax_ts_operation(struct himax_ts_data *ts)
 	ret = himax_touch_get(ts, ts->xfer_buf);
 	if (ret == HIMAX_TS_GET_DATA_FAIL)
 		return ret;
+	ret = himax_err_ctrl(ts, ts->xfer_buf);
+	if (!(ret == HIMAX_TS_REPORT_DATA))
+		return ret;
 	if (ts->hid_probed) {
-		ret = himax_hid_report(ts,
-				       ts->xfer_buf + HIMAX_HID_REPORT_HDR_SZ,
-				       ts->hid_desc.max_input_length -
-				       HIMAX_HID_REPORT_HDR_SZ);
+		offset = 0;
+		if (!ts->hid_req_cfg.input_RD_de)
+			ret = himax_hid_report(ts,
+					       ts->xfer_buf + offset + HIMAX_HID_REPORT_HDR_SZ,
+					       ts->hid_desc.max_input_length -
+					       HIMAX_HID_REPORT_HDR_SZ);
 		offset = ts->hid_desc.max_input_length;
 		if (ts->ic_data.stylus_function) {
-			ret += himax_hid_report(ts,
-						ts->xfer_buf + offset + HIMAX_HID_REPORT_HDR_SZ,
-						ts->hid_desc.max_input_length -
-						HIMAX_HID_REPORT_HDR_SZ);
+			if (!ts->hid_req_cfg.input_RD_de)
+				ret += himax_hid_report(ts,
+							ts->xfer_buf +
+							offset + HIMAX_HID_REPORT_HDR_SZ,
+							ts->hid_desc.max_input_length -
+							HIMAX_HID_REPORT_HDR_SZ);
 			offset += ts->hid_desc.max_input_length;
 		}
-		himax_decompress_heatmap(ts,
-					 ts->xfer_buf + offset + HIMAX_HID_REPORT_HDR_SZ);
+		if (!ts->ic_data.enc16bits)
+			heatmap_decompress_12bits(ts,
+						  ts->xfer_buf + offset + HIMAX_HID_REPORT_HDR_SZ,
+						  ts->heatmap_buf);
+		else
+			memcpy(ts->heatmap_buf,
+			       ts->xfer_buf + offset + HIMAX_HID_REPORT_HDR_SZ,
+			       ts->heatmap_data_size + HIMAX_HEAT_MAP_INFO_SZ + 1);
+
 		ret += himax_hid_report(ts, ts->heatmap_buf,
 					(ts->ic_data.rx_num * ts->ic_data.tx_num * 2) +
 					HIMAX_HEAT_MAP_INFO_SZ + 1);
@@ -2220,6 +3821,38 @@ static int himax_ts_operation(struct himax_ts_data *ts)
 }
 
 /**
+ * himax_cable_detect_func - cable status update handler
+ * @ts: himax touch screen data
+ * @force_renew: force renew cable status
+ *
+ * This function is used to maintain the cable status and call the
+ * corresponding function to update the cable status. If the update action
+ * is failed, it will print the error message and retry the action at the next
+ * time called.
+ *
+ * Return: Return: 0 on success, negative error code on failure
+ */
+static int himax_cable_detect_func(struct himax_ts_data *ts, bool force_renew)
+{
+	int ret;
+	bool connect_status = ts->latest_power_status > 0 ? true : false;
+
+	if (connect_status != ts->usb_connected || force_renew) {
+		ret = himax_mcu_usb_detect_set(ts, connect_status);
+		if (ret < 0) {
+			dev_err(ts->dev, "%s: Cable status change to %s failed\n", __func__,
+				connect_status ? "connected" : "disconnected");
+			return ret;
+		}
+		ts->usb_connected = connect_status;
+		dev_info(ts->dev, "%s: Cable status change: %s\n", __func__,
+			 ts->usb_connected ? "connected" : "disconnected");
+	}
+
+	return 0;
+}
+
+/**
  * himax_ts_work() - Work function for the touch screen
  * @ts: Himax touch screen data
  *
@@ -2227,11 +3860,14 @@ static int himax_ts_operation(struct himax_ts_data *ts)
  * call the himax_ts_operation() to get the touch data, dispatch the data
  * to HID core. If the touch data is not valid, it will reset the TPIC.
  * It will also call the hx83102j_reload_to_active() after the reset action.
+ * It will also call the himax_cable_detect_func() to check the cable status,
+ * and update the cable status to the FW if needed.
  *
  * Return: void
  */
 static void himax_ts_work(struct himax_ts_data *ts)
 {
+	himax_cable_detect_func(ts, false);
 	if (himax_ts_operation(ts) == HIMAX_TS_GET_DATA_FAIL) {
 		dev_info(ts->dev, "%s: Now reset the Touch chip\n", __func__);
 		himax_mcu_ic_reset(ts, true);
@@ -2259,7 +3895,7 @@ static int himax_update_fw(struct himax_ts_data *ts)
 		ret = himax_mcu_firmware_update_zf(ts->himax_fw, ts);
 		if (ret < 0) {
 			dev_err(ts->dev, "%s: TP upgrade error, upgrade_times = %d\n", __func__,
-			  retry_cnt);
+				retry_cnt);
 		} else {
 			dev_info(ts->dev, "%s: TP FW upgrade OK\n", __func__);
 			return 0;
@@ -2282,9 +3918,20 @@ static int himax_update_fw(struct himax_ts_data *ts)
 static int himax_hid_rd_init(struct himax_ts_data *ts)
 {
 	u32 rd_sz;
+	const u32 x_num = ts->ic_data.rx_num;
+	const u32 y_num = ts->ic_data.tx_num;
+	/* Data in 16bits and handshake data 4 bytes */
+	u32 raw_data_sz = (x_num * y_num + x_num + y_num) * 2 + 4;
 
-	/* The rd_sz is taken from RD size in FW hid report table. */
-	rd_sz = ts->hid_desc.report_desc_length;
+	/*
+	 * If hidraw input debug function is enabled, the rd_sz is combined by
+	 * heatmap_rd size and hidraw_debug_rd size. Otherwise the rd_sz is
+	 * combined by FW RD size and hidraw_debug_rd size.
+	 */
+	if (!ts->hid_req_cfg.input_RD_de)
+		rd_sz = ts->hid_desc.report_desc_length + g_host_ext_report_desc_sz;
+	else
+		rd_sz = g_host_heatmap_report_desc_sz + g_host_ext_report_desc_sz;
 	/* fw_info_table should contain address of hid_rd_desc in FW image */
 	if (ts->fw_info_table.addr_hid_rd_desc != 0) {
 		/* if rd_sz has been change, need to release old one */
@@ -2299,10 +3946,26 @@ static int himax_hid_rd_init(struct himax_ts_data *ts)
 			if (!ts->hid_rd_data.rd_data)
 				return -ENOMEM;
 		}
-		memcpy((void *)ts->hid_rd_data.rd_data,
-		       &ts->himax_fw->data[ts->fw_info_table.addr_hid_rd_desc],
-		       ts->hid_desc.report_desc_length);
-		ts->hid_rd_data.rd_length = ts->hid_desc.report_desc_length;
+
+		/* Copy the base RD from firmware table or heatmap RD only */
+		if (!ts->hid_req_cfg.input_RD_de) {
+			memcpy((void *)ts->hid_rd_data.rd_data,
+			       &ts->himax_fw->data[ts->fw_info_table.addr_hid_rd_desc],
+			       ts->hid_desc.report_desc_length);
+			ts->hid_rd_data.rd_length = ts->hid_desc.report_desc_length;
+		} else {
+			memcpy((void *)ts->hid_rd_data.rd_data,
+			       g_heatmap_rd.host_report_descriptor,
+			       g_host_heatmap_report_desc_sz);
+			ts->hid_rd_data.rd_length = g_host_heatmap_report_desc_sz;
+		}
+
+		/* Update monitor report_cnt by actual rawdata size */
+		g_host_ext_rd.rd_struct.monitor.report_cnt = cpu_to_le16(raw_data_sz);
+		/* Append hidraw_debug_rd to hid_rd_data */
+		memcpy((void *)(ts->hid_rd_data.rd_data + ts->hid_rd_data.rd_length),
+		       &g_host_ext_rd.host_report_descriptor, g_host_ext_report_desc_sz);
+		ts->hid_rd_data.rd_length += g_host_ext_report_desc_sz;
 	}
 
 	return 0;
@@ -2339,9 +4002,15 @@ static void himax_hid_register(struct himax_ts_data *ts)
  *
  * The function is used to calculate the final size of the HID report data.
  * The base size is equal to the max_input_length of the hid descriptor.
+ * Plus the size of the heatmap data and its header. If the heatmap data is
+ * encoded in 12bits, the size of heatmap is 1.5 times of the size of the
+ * rx_num * tx_num. Otherwise, the size of heatmap is 2 times of the size of
+ * the rx_num * tx_num.
  * If the size of the HID report data is not equal to the previous size, it
  * will free the previous allocated memory and allocate the new memory which
  * size is equal to the final size of touch_data_sz.
+ * It will also call the himax_heatmap_data_init() to initialize the heatmap
+ * data.
  *
  * Return: 0 on success, negative error code on failure
  */
@@ -2350,9 +4019,13 @@ static int himax_hid_report_data_init(struct himax_ts_data *ts)
 	ts->touch_data_sz = ts->hid_desc.max_input_length;
 	if (ts->ic_data.stylus_function)
 		ts->touch_data_sz += ts->hid_desc.max_input_length;
-	ts->heatmap_data_size = ts->ic_data.rx_num * ts->ic_data.tx_num * 3 / 2;
-	ts->touch_data_sz += HIMAX_HEAT_MAP_HEADER_SZ +
-			     HIMAX_HEAT_MAP_INFO_SZ + ts->heatmap_data_size;
+	ts->touch_data_sz += HIMAX_HEAT_MAP_HEADER_SZ;
+	ts->touch_data_sz += HIMAX_HEAT_MAP_INFO_SZ;
+	if (!ts->ic_data.enc16bits)
+		ts->heatmap_data_size = (ts->ic_data.rx_num * ts->ic_data.tx_num * 3) / 2;
+	else
+		ts->heatmap_data_size = (ts->ic_data.rx_num * ts->ic_data.tx_num * 2);
+	ts->touch_data_sz += ts->heatmap_data_size;
 	if (ts->touch_data_sz != ts->xfer_buf_sz) {
 		kfree(ts->xfer_buf);
 		ts->xfer_buf_sz = 0;
@@ -2361,13 +4034,9 @@ static int himax_hid_report_data_init(struct himax_ts_data *ts)
 			return -ENOMEM;
 		ts->xfer_buf_sz = ts->touch_data_sz;
 	}
-
-	if (!ts->heatmap_buf) {
-		ts->heatmap_buf = devm_kzalloc(ts->dev,
-					     ts->ic_data.rx_num * ts->ic_data.tx_num * 2 +
-					     HIMAX_HEAT_MAP_INFO_SZ + 1, GFP_KERNEL);
-		if (!ts->heatmap_buf)
-			return -ENOMEM;
+	if (himax_heatmap_data_init(ts)) {
+		dev_err(ts->dev, "%s: report data init fail\n", __func__);
+		return -ENOMEM;
 	}
 
 	return 0;
@@ -2394,7 +4063,7 @@ static int himax_power_set(struct himax_ts_data *ts, bool en)
 			ret = regulator_disable(pdata->vccd_supply);
 		if (ret) {
 			dev_err(ts->dev, "%s: unable to %s vccd supply\n", __func__,
-			  en ? "enable" : "disable");
+				en ? "enable" : "disable");
 			return ret;
 		}
 	}
@@ -2443,14 +4112,22 @@ static void himax_initial_work(struct work_struct *work)
 						initial_work.work);
 	int ret;
 	bool fw_load_status;
+	u32 fw_load_cnt;
 	const u32 fw_bin_header_sz = 1024;
+	const u32 fw_load_retry_limit = 3;
 
 	ts->ic_boot_done = false;
-	dev_info(ts->dev, "%s: request file %s\n", __func__, ts->firmware_name);
-	ret = request_firmware(&ts->himax_fw, ts->firmware_name, ts->dev);
-	if (ret < 0) {
-		dev_err(ts->dev, "%s: request firmware failed, error code = %d\n", __func__, ret);
-		return;
+	if (ts->hid_req_cfg.fw) {
+		ts->himax_fw = ts->hid_req_cfg.fw;
+		dev_info(ts->dev, "%s: get fw from hid_req_cfg\n", __func__);
+	} else {
+		dev_info(ts->dev, "%s: request file %s\n", __func__, ts->firmware_name);
+		ret = request_firmware(&ts->himax_fw, ts->firmware_name, ts->dev);
+		if (ret < 0) {
+			dev_err(ts->dev, "%s: request firmware failed, error code = %d\n",
+				__func__, ret);
+			return;
+		}
 	}
 	/* Parse the mapping table in 1k header */
 	fw_load_status = himax_mcu_bin_desc_get((unsigned char *)ts->himax_fw->data,
@@ -2460,17 +4137,26 @@ static void himax_initial_work(struct work_struct *work)
 		goto err_load_bin_descriptor;
 	}
 
-	if (himax_update_fw(ts)) {
-		dev_err(ts->dev, "%s: Update FW fail\n", __func__);
-		goto err_update_fw_failed;
+	for (fw_load_cnt = 0; fw_load_cnt < fw_load_retry_limit; fw_load_cnt++) {
+		if (himax_update_fw(ts)) {
+			dev_err(ts->dev, "%s: Update FW fail\n", __func__);
+			goto err_update_fw_failed;
+		}
+
+		dev_info(ts->dev, "%s: Update FW success\n", __func__);
+		/* write flag to sram to stop fw reload again. */
+		if (himax_disable_fw_reload(ts))
+			goto err_disable_fw_reload;
+
+		ret = himax_mcu_power_on_init(ts);
+		if (ret == -EAGAIN)
+			dev_err(ts->dev, "%s: initialize failed, reload FW again\n", __func__);
+		else if (ret < 0)
+			goto err_power_on_init;
+		else
+			break;
 	}
 
-	dev_info(ts->dev, "%s: Update FW success\n", __func__);
-	/* write flag to sram to stop fw reload again. */
-	if (himax_disable_fw_reload(ts))
-		goto err_disable_fw_reload;
-	if (himax_mcu_power_on_init(ts))
-		goto err_power_on_init;
 	/* get hid descriptors */
 	if (!ts->fw_info_table.addr_hid_desc) {
 		dev_err(ts->dev, "%s: No HID descriptor! Wrong FW!\n", __func__);
@@ -2509,6 +4195,12 @@ static void himax_initial_work(struct work_struct *work)
 		goto err_hid_rd_init_failed;
 	}
 
+	if (ts->hid_req_cfg.fw) {
+		/* Set flag of HIDRAW FW update result */
+		ts->hid_req_cfg.handshake_get = HIMAX_FWUP_BL_READY;
+		/* Unlock HIDRAW ioctl for result checking */
+		mutex_unlock(&ts->hid_ioctl_lock);
+	}
 	usleep_range(1000000, 1000100);
 	himax_hid_register(ts);
 	if (!ts->hid_probed) {
@@ -2520,7 +4212,9 @@ static void himax_initial_work(struct work_struct *work)
 		}
 	}
 
-	release_firmware(ts->himax_fw);
+	/* Release FW if it is from request_firmware */
+	if (!ts->hid_req_cfg.fw)
+		release_firmware(ts->himax_fw);
 	ts->himax_fw = NULL;
 
 	ts->ic_boot_done = true;
@@ -2540,8 +4234,78 @@ err_power_on_init:
 err_disable_fw_reload:
 err_update_fw_failed:
 err_load_bin_descriptor:
-	release_firmware(ts->himax_fw);
+	if (!ts->hid_req_cfg.fw) {
+		release_firmware(ts->himax_fw);
+	} else {
+		ts->hid_req_cfg.handshake_get = HIMAX_FWUP_FLASH_PROG_ERROR;
+		mutex_unlock(&ts->hid_ioctl_lock);
+	}
 	ts->himax_fw = NULL;
+}
+
+/**
+ * himax_heatmap_data_init() - Initialize the heatmap data
+ * @ts: Himax touch screen data
+ *
+ * The function is used to initialize the heatmap data. It will allocate the
+ * memory for the heatmap data. The size of the heatmap data is equal to the
+ * rx_num * tx_num * 2 plus the size of the heatmap header and the size of
+ * the heatmap ID.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int himax_heatmap_data_init(struct himax_ts_data *ts)
+{
+	ts->heatmap_buf = devm_kzalloc(ts->dev, (ts->ic_data.rx_num * ts->ic_data.tx_num) * 2
+				       + HIMAX_HEAT_MAP_INFO_SZ + HIMAX_HID_ID_SZ, GFP_KERNEL);
+	if (!ts->heatmap_buf)
+		return -ENOMEM;
+
+	return 0;
+}
+
+/**
+ * himax_heatmap_data_deinit() - Deinitialize the heatmap data
+ * @ts: Himax touch screen data
+ *
+ * The function is used to deinitialize the heatmap data.
+ *
+ * Return: None
+ */
+static void himax_heatmap_data_deinit(struct himax_ts_data *ts)
+{
+	devm_kfree(ts->dev, ts->heatmap_buf);
+	ts->heatmap_buf = NULL;
+}
+
+/**
+ * himax_hid_update() - Update the HID device
+ * @work: Work structure
+ *
+ * This function is used to update the HID device. When userspace tool switch
+ * on/off the input RD, the HID device should be re-registered to update the
+ * report descriptor. The heatmap size may change and need to release the old
+ * one first.
+ *
+ * Return: None
+ */
+static void himax_hid_update(struct work_struct *work)
+{
+	struct himax_ts_data *ts = container_of(work, struct himax_ts_data, work_hid_update.work);
+
+	himax_int_enable(ts, false);
+	himax_heatmap_data_deinit(ts);
+	if (!ts->hid_req_cfg.input_RD_de) {
+		himax_initial_work(&ts->initial_work.work);
+	} else {
+		if (!himax_hid_rd_init(ts)) {
+			dev_info(ts->dev, "%s: hid rd init success\n", __func__);
+			himax_hid_register(ts);
+			if (ts->hid_probed)
+				himax_hid_report_data_init(ts);
+		}
+	}
+	himax_int_enable(ts, true);
 }
 
 /**
@@ -2577,7 +4341,7 @@ static void himax_ap_notify_fw_suspend(struct himax_ts_data *ts, bool suspend)
 		}
 		usleep_range(1000, 1100);
 		ret = himax_mcu_register_read(ts, HIMAX_DSRAM_ADDR_AP_NOTIFY_FW_SUSPEND,
-					       rdata.byte, 4);
+					      rdata.byte, 4);
 		if (ret) {
 			dev_err(ts->dev, "%s: read suspend status failed!\n", __func__);
 			return;
@@ -2627,7 +4391,6 @@ static int himax_chip_suspend(struct himax_ts_data *ts)
 	himax_int_enable(ts, false);
 	gpiod_set_value(ts->pdata.gpiod_rst, 1);
 	himax_power_set(ts, false);
-	himax_hid_remove(ts);
 
 	return 0;
 }
@@ -2647,12 +4410,13 @@ static int himax_chip_suspend(struct himax_ts_data *ts)
 static int himax_chip_resume(struct himax_ts_data *ts)
 {
 	ts->resume_succeeded = false;
+	ts->excp_zero_event_count = 0;
+	ts->excp_reset_active = false;
 	if (himax_power_set(ts, true))
 		return -EIO;
 	gpiod_set_value(ts->pdata.gpiod_rst, 0);
 	himax_resume_proc(ts);
 	if (ts->resume_succeeded) {
-		himax_hid_probe(ts);
 		himax_int_enable(ts, true);
 	} else {
 		dev_err(ts->dev, "%s: resume failed!\n", __func__);
@@ -2739,9 +4503,20 @@ static int himax_chip_init(struct himax_ts_data *ts)
 	}
 	INIT_DELAYED_WORK(&ts->initial_work, himax_initial_work);
 	schedule_delayed_work(&ts->initial_work, msecs_to_jiffies(HIMAX_DELAY_BOOT_UPDATE_MS));
+	ts->himax_hidraw_wq =
+		create_singlethread_workqueue("himax_hidraw_wq");
+	if (!ts->himax_hidraw_wq) {
+		dev_err(ts->dev, "%s: allocate himax_hidraw_wq failed\n", __func__);
+		ret = -ENOMEM;
+		goto err_hidraw_wq_failed;
+	}
+	INIT_DELAYED_WORK(&ts->work_self_test, himax_self_test);
+	INIT_DELAYED_WORK(&ts->work_hid_update, himax_hid_update);
+	ts->usb_connected = false;
 	ts->initialized = true;
 
 	return 0;
+err_hidraw_wq_failed:
 	cancel_delayed_work_sync(&ts->initial_work);
 err_update_cfg_buf_alloc_failed:
 
@@ -2758,6 +4533,8 @@ err_update_cfg_buf_alloc_failed:
  */
 static void himax_chip_deinit(struct himax_ts_data *ts)
 {
+	cancel_delayed_work_sync(&ts->work_self_test);
+	destroy_workqueue(ts->himax_hidraw_wq);
 	cancel_delayed_work_sync(&ts->initial_work);
 }
 
@@ -2844,9 +4621,23 @@ static int __himax_initial_power_up(struct himax_ts_data *ts)
 		dev_err(ts->dev, "%s: chip init failed\n", __func__);
 		return ret;
 	}
+
+	ts->himax_pwr_wq = create_singlethread_workqueue("HMX_PWR_request");
+	if (!ts->himax_pwr_wq) {
+		dev_err(ts->dev, "%s:  allocate himax_pwr_wq failed\n", __func__);
+		ret = -ENOMEM;
+		goto err_create_pwr_wq_failed;
+	}
+
+	INIT_DELAYED_WORK(&ts->work_pwr, himax_pwr_register);
+	himax_pwr_register(&ts->work_pwr.work);
 	ts->probe_finish = true;
 
 	return 0;
+
+err_create_pwr_wq_failed:
+	himax_chip_deinit(ts);
+	return ret;
 }
 
 /**
@@ -2936,6 +4727,408 @@ static int himax_initial_power_up(struct himax_ts_data *ts)
 		return himax_register_panel_follower(ts);
 	else
 		return __himax_initial_power_up(ts);
+}
+
+/**
+ * himax_switch_mode_inspection() - Switch the inspection mode
+ * @ts: Himax touch screen data
+ * @mode: Inspection mode
+ *
+ * This function is used to switch the inspection mode for self test.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int himax_switch_mode_inspection(struct himax_ts_data *ts, int mode)
+{
+	int ret;
+	union himax_dword_data data;
+
+	/* Stop previous Handshaking first */
+	data.dword = cpu_to_le32(HIMAX_DSRAM_DATA_HANDSHAKING_RELEASE);
+	ret = himax_mcu_register_write(ts, HIMAX_DSRAM_ADDR_RAWDATA, data.byte, 4);
+	if (ret < 0) {
+		dev_err(ts->dev, "%s: write handshaking release failed\n", __func__);
+		return ret;
+	}
+
+	/* Switch Mode */
+	switch (mode) {
+	case HIMAX_INSPECT_SORTING:
+		data.dword = cpu_to_le32(HIMAX_PWD_SORTING_START);
+		break;
+	case HIMAX_INSPECT_OPEN:
+		data.dword = cpu_to_le32(HIMAX_PWD_OPEN_START);
+		break;
+	case HIMAX_INSPECT_MICRO_OPEN:
+		data.dword = cpu_to_le32(HIMAX_PWD_OPEN_START);
+		break;
+	case HIMAX_INSPECT_SHORT:
+		data.dword = cpu_to_le32(HIMAX_PWD_SHORT_START);
+		break;
+
+	case HIMAX_INSPECT_RAWDATA:
+		data.dword = cpu_to_le32(HIMAX_PWD_RAWDATA_START);
+		break;
+
+	case HIMAX_INSPECT_ABS_NOISE:
+		data.dword = cpu_to_le32(HIMAX_PWD_NOISE_START);
+		break;
+	default:
+		dev_err(ts->dev, "%s: Wrong mode=%d\n", __func__, mode);
+		return -HIMAX_INSPECT_ESWITCHMODE;
+	}
+	/* Assign new sorting mode */
+	ret = himax_mcu_assign_sorting_mode(ts, data.byte);
+	if (ret < 0) {
+		dev_err(ts->dev, "%s: assign sorting mode failed\n", __func__);
+		return ret;
+	}
+
+	return 0;
+}
+
+/**
+ * himax_switch_data_type() - Switch the data type
+ * @ts: Himax touch screen data
+ * @type: Data type
+ *
+ * This function is used to switch the data type for self test.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int himax_switch_data_type(struct himax_ts_data *ts, u32 type)
+{
+	int ret;
+	u32 datatype;
+
+	dev_info(ts->dev, "%s: Expected type = %s\n", __func__, g_himax_inspection_mode[type]);
+
+	switch (type) {
+	case HIMAX_INSPECT_SORTING:
+		datatype = g_hx_data_type[HIMAX_DATA_SORTING];
+		break;
+	case HIMAX_INSPECT_OPEN:
+		datatype = g_hx_data_type[HIMAX_DATA_OPEN];
+		break;
+	case HIMAX_INSPECT_MICRO_OPEN:
+		datatype = g_hx_data_type[HIMAX_DATA_MICRO_OPEN];
+		break;
+	case HIMAX_INSPECT_SHORT:
+		datatype = g_hx_data_type[HIMAX_DATA_SHORT];
+		break;
+	case HIMAX_INSPECT_RAWDATA:
+		datatype = g_hx_data_type[HIMAX_DATA_RAWDATA];
+		break;
+	case HIMAX_INSPECT_ABS_NOISE:
+		datatype = g_hx_data_type[HIMAX_DATA_NOISE];
+		break;
+	case HIMAX_INSPECT_BACK_NORMAL:
+		datatype = g_hx_data_type[HIMAX_DATA_BACK_NORMAL];
+		break;
+	default:
+		dev_err(ts->dev, "%s: Wrong type=%d\n", __func__, type);
+		return -HIMAX_INSPECT_ESWITCHDATA;
+	}
+	ret = himax_mcu_diag_register_set(ts, datatype);
+	if (ret < 0)
+		dev_err(ts->dev, "%s: set data type failed\n", __func__);
+
+	return ret;
+}
+
+/**
+ * himax_bank_search_set() - Set the bank search
+ * @ts: Himax touch screen data
+ * @checktype: Inspection mode
+ *
+ * This function is used to set the bank search for self test. This register
+ * is combined with other function, bank search used LSB 8 bits. So need to
+ * read the register first, then set the bank search and write it back.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int himax_bank_search_set(struct himax_ts_data *ts, u32 checktype)
+{
+	int ret;
+	union himax_dword_data data;
+
+	ret = himax_mcu_register_read(ts, HIMAX_DSRAM_ADDR_BANK_SEARCH, data.byte, 4);
+	if (ret < 0) {
+		dev_err(ts->dev, "%s: read bank search failed\n", __func__);
+		return ret;
+	}
+
+	switch (checktype) {
+	case HIMAX_INSPECT_RAWDATA:
+		data.byte[0] = HIMAX_BANK_SEARCH_RAWDATA;
+		break;
+	case HIMAX_INSPECT_ABS_NOISE:
+		data.byte[0] = HIMAX_BANK_SEARCH_NOISE;
+		break;
+	default:
+		data.byte[0] = HIMAX_BANK_SEARCH_OPENSHORT;
+	}
+
+	ret = himax_mcu_register_write(ts, HIMAX_DSRAM_ADDR_BANK_SEARCH, data.byte, 4);
+	if (ret < 0)
+		dev_err(ts->dev, "%s: write bank search failed\n", __func__);
+
+	return ret;
+}
+
+/**
+ * himax_set_N_frame() - Set the N frame to skip for self test
+ * @ts: Himax touch screen data
+ * @n_frame: N frame value
+ * @checktype: Inspection mode
+ *
+ * This function is used to set the N frame to skip for self test. It will
+ * set the bank search first, then write the N frame to the register. The
+ * N frame is used to skip the frame for self test when collecting the data
+ * after switch the mode.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int himax_set_N_frame(struct himax_ts_data *ts, u32 n_frame, u32 checktype)
+{
+	int ret;
+	union himax_dword_data data;
+
+	ret = himax_bank_search_set(ts, checktype);
+	if (ret < 0) {
+		dev_err(ts->dev, "%s: set bank search failed\n", __func__);
+		return ret;
+	}
+
+	data.dword = cpu_to_le32(n_frame);
+	ret = himax_mcu_register_write(ts, HIMAX_DSRAM_ADDR_SET_NFRAME, data.byte, 4);
+	if (ret < 0)
+		dev_err(ts->dev, "%s: write N frame failed\n", __func__);
+
+	return ret;
+}
+
+/**
+ * himax_check_mode() - Check the inspection mode
+ * @ts: Himax touch screen data
+ * @checktype: Inspection mode
+ *
+ * This function is used to check the inspection mode for self test. It will
+ * read the sorting mode register and compare it with the expected value.
+ * If the mode is not matched, it will return
+ * HIMAX_INSPECT_CHANGE_MODE_REQUIRED, otherwise return 0 indicate the mode
+ * is matched.
+ *
+ * Return: 0 on mode matched, HIMAX_INSPECT_CHANGE_MODE_REQUIRED when mode
+ * change required, negative error code on failure
+ */
+static int himax_check_mode(struct himax_ts_data *ts, u32 checktype)
+{
+	int ret;
+	const u16 passwd_mask = GENMASK(15, 0);
+	u16 wait_pwd;
+	union himax_dword_data data;
+
+	switch (checktype) {
+	case HIMAX_INSPECT_SORTING:
+		wait_pwd = cpu_to_le16(HIMAX_PWD_SORTING_END);
+		break;
+	case HIMAX_INSPECT_OPEN:
+		wait_pwd = cpu_to_le16(HIMAX_PWD_OPEN_END);
+		break;
+	case HIMAX_INSPECT_MICRO_OPEN:
+		wait_pwd = cpu_to_le16(HIMAX_PWD_OPEN_END);
+		break;
+	case HIMAX_INSPECT_SHORT:
+		wait_pwd = cpu_to_le16(HIMAX_PWD_SHORT_END);
+		break;
+	case HIMAX_INSPECT_RAWDATA:
+		wait_pwd = cpu_to_le16(HIMAX_PWD_RAWDATA_END);
+		break;
+
+	case HIMAX_INSPECT_ABS_NOISE:
+		wait_pwd = cpu_to_le16(HIMAX_PWD_NOISE_END);
+		break;
+
+	default:
+		dev_err(ts->dev, "%s: Wrong type = %u\n", __func__, checktype);
+		return -HIMAX_INSPECT_ESWITCHMODE;
+	}
+
+	ret = himax_mcu_check_sorting_mode(ts, data.byte);
+	if (ret)
+		return ret;
+
+	if ((le32_to_cpu(data.dword) & passwd_mask) == wait_pwd) {
+		dev_info(ts->dev, "%s: Current sorting mode: %s\n", __func__,
+			 g_himax_inspection_mode[checktype]);
+		return 0;
+	} else {
+		return HIMAX_INSPECT_CHANGE_MODE_REQUIRED;
+	}
+}
+
+/**
+ * himax_wait_sorting_mode() - Wait the inspection mode
+ * @ts: Himax touch screen data
+ * @checktype: Inspection mode
+ *
+ * This function is used to wait the inspection mode for self test. It will
+ * read current sorting mode for most 10 times each interval 50ms to check
+ * if the target mode is reached.
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+static int himax_wait_sorting_mode(struct himax_ts_data *ts, u32 checktype)
+{
+	const u16 passwd_mask = GENMASK(15, 0);
+	u16 wait_pwd;
+	u32 retry_cnt;
+	const u32 retry_limit = 10;
+	union himax_dword_data data;
+
+	switch (checktype) {
+	case HIMAX_INSPECT_SORTING:
+		wait_pwd = cpu_to_le16(HIMAX_PWD_SORTING_END);
+		break;
+	case HIMAX_INSPECT_OPEN:
+		wait_pwd = cpu_to_le16(HIMAX_PWD_OPEN_END);
+		break;
+	case HIMAX_INSPECT_MICRO_OPEN:
+		wait_pwd = cpu_to_le16(HIMAX_PWD_OPEN_END);
+		break;
+	case HIMAX_INSPECT_SHORT:
+		wait_pwd = cpu_to_le16(HIMAX_PWD_SHORT_END);
+		break;
+	case HIMAX_INSPECT_RAWDATA:
+		wait_pwd = cpu_to_le16(HIMAX_PWD_RAWDATA_END);
+		break;
+	case HIMAX_INSPECT_ABS_NOISE:
+		wait_pwd = cpu_to_le16(HIMAX_PWD_NOISE_END);
+		break;
+
+	default:
+		dev_warn(ts->dev, "%s: No target type = %u\n", __func__, checktype);
+		return -HIMAX_INSPECT_ESWITCHMODE;
+	}
+	dev_info(ts->dev, "%s: NowType: %s, Expected = 0x%04X\n", __func__,
+		 g_himax_inspection_mode[checktype], wait_pwd);
+	for (retry_cnt = 0; retry_cnt < retry_limit; retry_cnt++) {
+		if (himax_mcu_check_sorting_mode(ts, data.byte))
+			return -HIMAX_INSPECT_ESWITCHMODE;
+		if ((le32_to_cpu(data.dword) & passwd_mask) == wait_pwd)
+			return 0;
+		usleep_range(50000, 50100);
+	}
+
+	return -HIMAX_INSPECT_ESWITCHMODE;
+}
+
+/**
+ * himax_self_test() - Self test work function
+ * @work: Work structure
+ *
+ * This function is used to perform the self test. It will check current
+ * mode, switch mode if required, wait the sorting mode, switch data type,
+ * set N frame, and get the data. The switch mode step may take more time
+ * by circustance, so it will retry 3 times if it failed. Wheather the
+ * self test is finished or failed, it will unlock the hid_ioctl_lock.
+ *
+ * Return: None
+ */
+static void himax_self_test(struct work_struct *work)
+{
+	int ret, n_frame;
+	int switch_mode_cnt = 0;
+	const int switch_mode_retry_limit = 3;
+	struct himax_ts_data *ts =
+		container_of(work, struct himax_ts_data, work_self_test.work);
+	u32 checktype = ts->hid_req_cfg.self_test_type;
+
+	ret = himax_check_mode(ts, checktype);
+	if (ret < 0) {
+		ts->hid_req_cfg.handshake_get = HIMAX_HID_SELF_TEST_ERROR;
+		goto END;
+	}
+
+	if (ret == HIMAX_INSPECT_CHANGE_MODE_REQUIRED) {
+		dev_info(ts->dev, "%s: Need Change Mode, target = %s\n", __func__,
+			 g_himax_inspection_mode[checktype]);
+SWITCH_MODE:
+		ret = hx83102j_sense_off(ts, true);
+		if (ret) {
+			ts->hid_req_cfg.handshake_get = HIMAX_HID_SELF_TEST_ERROR;
+			goto END;
+		}
+
+		ret = himax_switch_mode_inspection(ts, checktype);
+		if (ret) {
+			dev_err(ts->dev, "%s: switch mode failed!\n", __func__);
+			ts->hid_req_cfg.handshake_get = HIMAX_HID_SELF_TEST_ERROR;
+			goto END;
+		}
+
+		if (checktype == HIMAX_INSPECT_ABS_NOISE)
+			n_frame = cpu_to_le32(HIMAX_NFRAME_NOISE);
+		else
+			n_frame = cpu_to_le32(HIMAX_NFRAME_OTHER);
+
+		ret = himax_set_N_frame(ts, n_frame, checktype);
+		if (ret) {
+			dev_err(ts->dev, "%s: set N frame failed!\n", __func__);
+			ts->hid_req_cfg.handshake_get = HIMAX_HID_SELF_TEST_ERROR;
+			goto END;
+		}
+		ret = hx83102j_sense_on(ts, true);
+		if (ret) {
+			dev_err(ts->dev, "%s: sense on failed!\n", __func__);
+			ts->hid_req_cfg.handshake_get = HIMAX_HID_SELF_TEST_ERROR;
+			goto END;
+		}
+	}
+
+	ret = himax_wait_sorting_mode(ts, checktype);
+	if (ret) {
+		if (ret == -HIMAX_INSPECT_ESWITCHMODE &&
+		    switch_mode_cnt < switch_mode_retry_limit) {
+			switch_mode_cnt++;
+			himax_mcu_ic_reset(ts, false);
+			goto SWITCH_MODE;
+		}
+		dev_err(ts->dev, "%s: Wait sorting mode timeout\n", __func__);
+		ts->hid_req_cfg.handshake_get = HIMAX_HID_SELF_TEST_ERROR;
+		goto END;
+	}
+	ret = himax_switch_data_type(ts, checktype);
+	if (ret) {
+		dev_err(ts->dev, "%s: switch data type failed\n", __func__);
+		ts->hid_req_cfg.handshake_get = HIMAX_HID_SELF_TEST_ERROR;
+		goto END;
+	}
+
+	ts->hid_req_cfg.handshake_get = HIMAX_HID_SELF_TEST_FINISH;
+END:
+	mutex_unlock(&ts->hid_ioctl_lock);
+}
+
+/**
+ * himax_get_data() - Get the self test result data
+ * @ts: Himax touch screen data
+ * @data: Data buffer
+ *
+ * This function is used to get the self test result data.
+ *
+ * Return: HIMAX_INSPECT_OK on success, -HIMAX_INSPECT_EGETRAW on failure
+ */
+static int himax_get_data(struct himax_ts_data *ts, u8 *data)
+{
+	int get_raw_rlst;
+
+	get_raw_rlst = himax_mcu_get_DSRAM_data(ts, data);
+	if (!get_raw_rlst)
+		return HIMAX_INSPECT_OK;
+	else
+		return -HIMAX_INSPECT_EGETRAW;
 }
 
 /**
@@ -3067,6 +5260,7 @@ static int himax_spi_drv_probe(struct spi_device *spi)
 	spin_lock_init(&ts->irq_lock);
 	mutex_init(&ts->rw_lock);
 	mutex_init(&ts->reg_lock);
+	mutex_init(&ts->hid_ioctl_lock);
 	mutex_init(&ts->zf_update_lock);
 	dev_set_drvdata(&spi->dev, ts);
 	spi_set_drvdata(spi, ts);
@@ -3103,6 +5297,10 @@ static void himax_spi_drv_remove(struct spi_device *spi)
 			if (ts->hid_probed)
 				himax_hid_remove(ts);
 		}
+		power_supply_unreg_notifier(&ts->power_notif);
+		cancel_delayed_work_sync(&ts->work_pwr);
+		destroy_workqueue(ts->himax_pwr_wq);
+
 		himax_chip_deinit(ts);
 		himax_platform_deinit(ts);
 	}
@@ -3127,9 +5325,13 @@ static void himax_shutdown(struct spi_device *spi)
 	}
 
 	himax_int_enable(ts, false);
-	gpiod_set_value(ts->pdata.gpiod_rst, 1);
-	himax_power_deconfig(&ts->pdata);
 	himax_hid_remove(ts);
+	power_supply_unreg_notifier(&ts->power_notif);
+	cancel_delayed_work_sync(&ts->work_pwr);
+	destroy_workqueue(ts->himax_pwr_wq);
+	gpiod_set_value(ts->pdata.gpiod_rst, 1);
+	himax_chip_deinit(ts);
+	himax_platform_deinit(ts);
 }
 
 #if defined(CONFIG_OF)
@@ -3140,6 +5342,12 @@ static const struct of_device_id himax_table[] = {
 MODULE_DEVICE_TABLE(of, himax_table);
 #endif
 
+static const struct spi_device_id himax_spi_id[] = {
+	{ "hx83102j" },
+	{ },
+};
+MODULE_DEVICE_TABLE(spi, himax_spi_id);
+
 static struct spi_driver himax_hid_over_spi_driver = {
 	.driver = {
 		.name =		"hx83102j",
@@ -3148,6 +5356,7 @@ static struct spi_driver himax_hid_over_spi_driver = {
 		.of_match_table = of_match_ptr(himax_table),
 #endif
 	},
+	.id_table =	himax_spi_id,
 	.probe =	himax_spi_drv_probe,
 	.remove =	himax_spi_drv_remove,
 	.shutdown =	himax_shutdown,
