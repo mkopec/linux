@@ -2165,6 +2165,25 @@ static void himax_hid_remove(struct himax_ts_data *ts)
  * Return: HIMAX_TS_SUCCESS on success, negative error code in
  * himax_touch_report_status on failure
  */
+static void himax_decompress_heatmap(struct himax_ts_data *ts, const u8 *src)
+{
+	u32 i;
+	u32 count = ts->ic_data.rx_num * ts->ic_data.tx_num;
+	const u32 header_size = HIMAX_HEAT_MAP_INFO_SZ + 1;
+	u8 *dst = ts->heatmap_buf;
+
+	memcpy(dst, src, header_size);
+	for (i = 0; i < count; i += 2) {
+		const u8 *packed = src + header_size + i * 3 / 2;
+		u8 *unpacked = dst + header_size + i * 2;
+
+		unpacked[0] = packed[0];
+		unpacked[1] = packed[2] >> 4;
+		unpacked[2] = packed[1];
+		unpacked[3] = packed[2] & 0x0f;
+	}
+}
+
 static int himax_ts_operation(struct himax_ts_data *ts)
 {
 	int ret;
@@ -2175,6 +2194,10 @@ static int himax_ts_operation(struct himax_ts_data *ts)
 	if (ret == HIMAX_TS_GET_DATA_FAIL)
 		return ret;
 	if (ts->hid_probed) {
+		ret = himax_hid_report(ts,
+				       ts->xfer_buf + HIMAX_HID_REPORT_HDR_SZ,
+				       ts->hid_desc.max_input_length -
+				       HIMAX_HID_REPORT_HDR_SZ);
 		offset = ts->hid_desc.max_input_length;
 		if (ts->ic_data.stylus_function) {
 			ret += himax_hid_report(ts,
@@ -2183,6 +2206,11 @@ static int himax_ts_operation(struct himax_ts_data *ts)
 						HIMAX_HID_REPORT_HDR_SZ);
 			offset += ts->hid_desc.max_input_length;
 		}
+		himax_decompress_heatmap(ts,
+					 ts->xfer_buf + offset + HIMAX_HID_REPORT_HDR_SZ);
+		ret += himax_hid_report(ts, ts->heatmap_buf,
+					(ts->ic_data.rx_num * ts->ic_data.tx_num * 2) +
+					HIMAX_HEAT_MAP_INFO_SZ + 1);
 	}
 
 	if (ret != 0)
@@ -2322,6 +2350,9 @@ static int himax_hid_report_data_init(struct himax_ts_data *ts)
 	ts->touch_data_sz = ts->hid_desc.max_input_length;
 	if (ts->ic_data.stylus_function)
 		ts->touch_data_sz += ts->hid_desc.max_input_length;
+	ts->heatmap_data_size = ts->ic_data.rx_num * ts->ic_data.tx_num * 3 / 2;
+	ts->touch_data_sz += HIMAX_HEAT_MAP_HEADER_SZ +
+			     HIMAX_HEAT_MAP_INFO_SZ + ts->heatmap_data_size;
 	if (ts->touch_data_sz != ts->xfer_buf_sz) {
 		kfree(ts->xfer_buf);
 		ts->xfer_buf_sz = 0;
@@ -2329,6 +2360,14 @@ static int himax_hid_report_data_init(struct himax_ts_data *ts)
 		if (!ts->xfer_buf)
 			return -ENOMEM;
 		ts->xfer_buf_sz = ts->touch_data_sz;
+	}
+
+	if (!ts->heatmap_buf) {
+		ts->heatmap_buf = devm_kzalloc(ts->dev,
+					     ts->ic_data.rx_num * ts->ic_data.tx_num * 2 +
+					     HIMAX_HEAT_MAP_INFO_SZ + 1, GFP_KERNEL);
+		if (!ts->heatmap_buf)
+			return -ENOMEM;
 	}
 
 	return 0;

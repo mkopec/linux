@@ -52,6 +52,8 @@
 #define HIMAX_ZF_PARTITION_DESC_SZ			16U
 /* HIDRAW report header size */
 #define HIMAX_HID_REPORT_HDR_SZ				2U
+#define HIMAX_HEAT_MAP_HEADER_SZ			3U
+#define HIMAX_HEAT_MAP_INFO_SZ				20U
 /* hx83102j IC parameters */
 #define HIMAX_HX83102J_DSRAM_SZ				73728U
 #define HIMAX_HX83102J_FLASH_SIZE			261120U
@@ -392,11 +394,13 @@ struct himax_platform_data {
  * @xfer_buf: Interrupt data buffer
  * @xfer_rx_data: SPI Transfer receive data buffer
  * @xfer_tx_data: SPI Transfer transmit data buffer
+ * @heatmap_buf: Decompressed heatmap HID report
  * @zf_update_cfg_buffer: Zero flash update configuration buffer
  * @himax_irq: IRQ number
  * @chip_max_dsram_size: Maximum size of DSRAM
  * @spi_xfer_max_sz: Size of SPI controller max transfer size
  * @xfer_buf_sz: Size of interrupt data buffer
+ * @heatmap_data_size: Packed heatmap data size
  * @irq_state: IRQ state
  * @irq_lock: Spin lock for irq
  * @initialized: Indicate the driver is initialized
@@ -424,11 +428,13 @@ struct himax_ts_data {
 	u8 *xfer_buf;
 	u8 *xfer_rx_data;
 	u8 *xfer_tx_data;
+	u8 *heatmap_buf;
 	u8 *zf_update_cfg_buffer;
 	s32 himax_irq;
 	u32 chip_max_dsram_size;
 	u32 spi_xfer_max_sz;
 	u32 xfer_buf_sz;
+	u32 heatmap_data_size;
 	atomic_t irq_state;
 	/* lock for irq_save */
 	spinlock_t irq_lock;
