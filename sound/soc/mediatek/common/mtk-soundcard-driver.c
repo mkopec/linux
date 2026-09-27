@@ -325,7 +325,15 @@ int mtk_soundcard_common_probe(struct platform_device *pdev)
 
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
 
-	if (!needs_legacy_probe)
+	/*
+	 * When a component is still missing, snd_soc_bind_card() queues the
+	 * card for a later rebind and returns success, so the card is not
+	 * instantiated yet. That rebind reuses this same dai_link array, so
+	 * the codec references parsed from the devicetree must be kept:
+	 * dropping them leaves both name and of_node unset and the rebind
+	 * fails the dai link sanity check instead.
+	 */
+	if (!needs_legacy_probe && (ret || snd_soc_card_is_instantiated(card)))
 		clean_card_reference(card);
 
 	if (ret) {
