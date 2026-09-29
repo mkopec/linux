@@ -134,6 +134,7 @@ struct panfrost_device {
 	int mmu_irq;
 
 	void __iomem *iomem;
+	void __iomem *mtk_mfgcfg;
 	struct clk *clock;
 	struct clk *bus_clock;
 	struct clk *bus_ace_clock;
