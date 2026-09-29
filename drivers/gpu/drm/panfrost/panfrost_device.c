@@ -508,12 +508,12 @@ static int panfrost_device_resume(struct device *dev)
 	}
 
 	if (pfdev->comp->pm_features & BIT(GPU_PM_CLK_DIS)) {
-		ret = clk_enable(pfdev->clock);
+		ret = clk_prepare_enable(pfdev->clock);
 		if (ret)
 			goto err_clk;
 
 		if (pfdev->bus_clock) {
-			ret = clk_enable(pfdev->bus_clock);
+			ret = clk_prepare_enable(pfdev->bus_clock);
 			if (ret)
 				goto err_bus_clk;
 		}
@@ -527,10 +527,10 @@ static int panfrost_device_resume(struct device *dev)
 
 err_resume:
 	if (pfdev->comp->pm_features & BIT(GPU_PM_CLK_DIS) && pfdev->bus_clock)
-		clk_disable(pfdev->bus_clock);
+		clk_disable_unprepare(pfdev->bus_clock);
 err_bus_clk:
 	if (pfdev->comp->pm_features & BIT(GPU_PM_CLK_DIS))
-		clk_disable(pfdev->clock);
+		clk_disable_unprepare(pfdev->clock);
 err_clk:
 	if (pfdev->comp->pm_features & BIT(GPU_PM_VREG_OFF))
 		dev_pm_opp_set_opp(dev, NULL);
@@ -546,11 +546,15 @@ static int panfrost_device_suspend(struct device *dev)
 	if (ret)
 		return ret;
 
+	/*
+	 * Unprepare as well: some clock providers, e.g. MediaTek PLLs, only
+	 * power down in unprepare, and a running GPU PLL blocks system sleep.
+	 */
 	if (pfdev->comp->pm_features & BIT(GPU_PM_CLK_DIS)) {
 		if (pfdev->bus_clock)
-			clk_disable(pfdev->bus_clock);
+			clk_disable_unprepare(pfdev->bus_clock);
 
-		clk_disable(pfdev->clock);
+		clk_disable_unprepare(pfdev->clock);
 	}
 
 	if (pfdev->comp->pm_features & BIT(GPU_PM_VREG_OFF))
