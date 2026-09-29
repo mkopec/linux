@@ -170,9 +170,9 @@ struct vdec_h264_slice_info_ext {
 	u64 wdma_end_addr_offset;
 	u16 nal_info;
 	u16 timeout;
-	u32 reserved;
 	u64 vdec_fb_va;
 	u32 crc[8];
+	u32 reserved;
 };
 
 /**
@@ -1226,7 +1226,12 @@ static int vdec_h264_slice_init(struct mtk_vcodec_dec_ctx *ctx)
 		goto error_free_inst;
 	}
 
-	if (IS_VDEC_SUPPORT_EXT(ctx->dev->dec_capability)) {
+	/*
+	 * The MT8188 SCP firmware uses the extended VSI layout for H.264 but
+	 * does not set MTK_VDEC_IS_SUPPORT_EXT in its capabilities.
+	 */
+	if (IS_VDEC_SUPPORT_EXT(ctx->dev->dec_capability) ||
+	    ctx->dev->chip_name == MTK_VDEC_MT8188) {
 		vsi_size = sizeof(struct vdec_h264_slice_vsi_ext);
 
 		vsi_size = round_up(vsi_size, VCODEC_DEC_ALIGNED_64);
