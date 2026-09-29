@@ -1133,6 +1133,7 @@ static const struct panfrost_compatible mediatek_mt8188_data = {
 	.pm_domain_names = mediatek_pm_domains,
 	.pm_features = BIT(GPU_PM_CLK_DIS) | BIT(GPU_PM_VREG_OFF),
 	.gpu_quirks = BIT(GPU_QUIRK_FORCE_AARCH64_PGTABLE),
+	.vendor_quirk = panfrost_gpu_mt8188_quirk,
 };
 
 static const struct panfrost_compatible mediatek_mt8192_data = {
