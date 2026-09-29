@@ -201,6 +201,12 @@
 			reg = <0 0x61000000 0 0x100000>;
 			no-map;
 		};
+
+		scp_dual_mem: memory@70000000 {
+			compatible = "shared-dma-pool";
+			reg = <0 0x70000000 0 0xa000000>;
+			no-map;
+		};
 	};
 
 	wifi-bt-connector {
