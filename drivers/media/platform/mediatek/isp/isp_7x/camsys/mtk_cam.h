@@ -301,6 +301,8 @@ struct mtk_cam_device;
 
 struct mtk_cam_ctx {
 	struct mtk_cam_device *cam;
+	u64 last_sof_mono_ns;
+	u32 dma_done_seq;
 	unsigned int stream_id;
 	unsigned int streaming;
 	unsigned int synced;
