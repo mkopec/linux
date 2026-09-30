@@ -3213,6 +3213,8 @@ struct mtk_cam_ctx *mtk_cam_start_ctx(struct mtk_cam_device *cam,
 	atomic_set(&ctx->enqueued_frame_seq_no, 0);
 	ctx->composed_frame_seq_no = 0;
 	ctx->dequeued_frame_seq_no = 0;
+	ctx->last_sof_mono_ns = 0;
+	ctx->dma_done_seq = 0;
 	atomic_set(&ctx->running_s_data_cnt, 0);
 	init_completion(&ctx->session_complete);
 	init_completion(&ctx->m2m_complete);
@@ -3395,7 +3397,8 @@ void mtk_cam_stop_ctx(struct mtk_cam_ctx *ctx, struct mtk_cam_video_device *node
 		struct v4l2_subdev *sd;
 
 		v4l2_device_for_each_subdev(sd, &cam->v4l2_dev) {
-			if (sd->entity.function == MEDIA_ENT_F_VID_IF_BRIDGE) {
+			if (sd->entity.function == MEDIA_ENT_F_VID_IF_BRIDGE &&
+			    sd->s_stream_enabled) {
 				int ret;
 
 				ret = v4l2_subdev_call(sd, video, s_stream, 0);
