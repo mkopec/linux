@@ -3707,7 +3707,7 @@ static int config_bridge_pad_links(struct mtk_cam_device *cam,
 					    MTK_CAM_CIO_PAD_SRC,
 					    pipe_entity,
 					    MTK_CAM_CIO_PAD_SINK,
-					    MEDIA_LNK_FL_DYNAMIC);
+					    0);
 
 		if (ret) {
 			dev_warn(cam->dev,
