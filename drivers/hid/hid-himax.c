@@ -4121,8 +4121,21 @@ static void himax_initial_work(struct work_struct *work)
 		ts->himax_fw = ts->hid_req_cfg.fw;
 		dev_info(ts->dev, "%s: get fw from hid_req_cfg\n", __func__);
 	} else {
-		dev_info(ts->dev, "%s: request file %s\n", __func__, ts->firmware_name);
-		ret = request_firmware(&ts->himax_fw, ts->firmware_name, ts->dev);
+		if (!ts->fw_request_retries)
+			dev_info(ts->dev, "%s: request file %s\n", __func__,
+				 ts->firmware_name);
+		ret = firmware_request_nowarn(&ts->himax_fw, ts->firmware_name, ts->dev);
+		/*
+		 * The driver may be probed from the initramfs, before the root
+		 * filesystem holding the firmware is mounted. Keep retrying for
+		 * a while instead of leaving the touchscreen dead.
+		 */
+		if (ret == -ENOENT &&
+		    ts->fw_request_retries++ < HIMAX_FW_REQUEST_RETRY_LIMIT) {
+			schedule_delayed_work(&ts->initial_work,
+					      msecs_to_jiffies(HIMAX_FW_REQUEST_RETRY_MS));
+			return;
+		}
 		if (ret < 0) {
 			dev_err(ts->dev, "%s: request firmware failed, error code = %d\n",
 				__func__, ret);

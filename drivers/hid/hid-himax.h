@@ -48,6 +48,9 @@
 #define HIMAX_DATA_CLEAR				0x00000000
 /* boot update start delay */
 #define HIMAX_DELAY_BOOT_UPDATE_MS			2000
+/* firmware lookup retry while the root filesystem is not mounted yet */
+#define HIMAX_FW_REQUEST_RETRY_MS			2000
+#define HIMAX_FW_REQUEST_RETRY_LIMIT			60
 #define HIMAX_DELAY_PWR_INIT_CHECK_MS			3000
 #define HIMAX_DELAY_PWR_CHECK_MS			1100
 #define HIMAX_TP_INFO_STR_LEN				12U
@@ -904,6 +907,7 @@ struct himax_platform_data {
  * @himax_pwr_wq: Workqueue for power check
  * @work_pwr: Delayed work for power check
  * @initial_work: Delayed work for TP initialization
+ * @fw_request_retries: Number of failed firmware lookups in initial_work
  * @himax_hidraw_wq: Workqueue for hidraw
  * @work_hid_update: Delayed work for hid update
  * @work_self_test: Delayed work for self test
@@ -958,6 +962,7 @@ struct himax_ts_data {
 	struct workqueue_struct *himax_pwr_wq;
 	struct delayed_work work_pwr;
 	struct delayed_work initial_work;
+	unsigned int fw_request_retries;
 	struct workqueue_struct *himax_hidraw_wq;
 	struct delayed_work work_hid_update;
 	struct delayed_work work_self_test;
