@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config VIDEO_MTK_ISP_71_CAMSYS
+	tristate "MediaTek ISP 7.1 camsys driver"
+	depends on ARCH_MEDIATEK || COMPILE_TEST
+	depends on VIDEO_DEV
+	depends on MTK_SCP
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	select VIDEOBUF2_DMA_CONTIG
+	help
+	  Support for the camera system of the MediaTek ISP 7.1, found in
+	  the MT8188: the seninf CSI-2 receivers and the raw and YUV
+	  processing pipelines. The ISP is driven through the camera
+	  firmware running on the second SCP core.
+
+	  To compile this driver as a module, choose M here: the modules
+	  will be called mtk-cam-isp and mtk-cam-plat-util.
