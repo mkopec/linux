@@ -60,6 +60,9 @@
 
 #define DISP_REG_MERGE_MUTE_0		0xf00
 
+/* Maximum prefetch data rate, see mtk_merge_mode_valid() */
+#define MERGE_MAX_PREFETCH_RATE		12000U
+
 struct mtk_disp_merge {
 	void __iomem			*regs;
 	struct clk			*clk;
@@ -254,18 +257,25 @@ enum drm_mode_status mtk_merge_mode_valid(struct device *dev,
 	 *           = htotal * vtotal * fps * N / vbp
 	 *           = clk * N / vbp (pixels per second)
 	 *
-	 * Say 4K60 (CEA-861) is the maximum mode supported by the SoC
-	 * data rate = 594000K * N / 72 = 8250 (standard)
+	 * The standard 4K60 (CEA-861) timing needs
+	 * data rate = 594000K * N / 72 = 8250
 	 * (remove K * N due to the same unit)
 	 *
+	 * 8250 is the limit validated by MediaTek. This local change raises it
+	 * to allow 3440x1440@60 with CVT reduced blanking, which exceeds it and
+	 * may underflow under heavy DRAM contention.
+	 *
 	 * For 2560x1440@144 (clk=583600K, vbp=17):
-	 * data rate = 583600 / 17 ~= 34329 > 8250 (NG)
+	 * data rate = 583600 / 17 ~= 34329 > 12000 (NG)
 	 *
 	 * For 2560x1440@120 (clk=497760K, vbp=77):
-	 * data rate = 497760 / 77 ~= 6464 < 8250 (OK)
+	 * data rate = 497760 / 77 ~= 6464 < 12000 (OK)
 	 *
 	 * A non-standard 4K60 timing (clk=521280K, vbp=54)
-	 * data rate = 521280 / 54 ~= 9653 > 8250 (NG)
+	 * data rate = 521280 / 54 ~= 9653 < 12000 (OK)
+	 *
+	 * For 3440x1440@60 CVT-RB (clk=319750K, vbp=28):
+	 * data rate = 319750 / 28 ~= 11419 < 12000 (OK)
 	 *
 	 * Bandwidth requirement of hardware prefetch increases significantly
 	 * when the VBP decreases (more than 4x in this example).
@@ -278,9 +288,9 @@ enum drm_mode_status mtk_merge_mode_valid(struct device *dev,
 	 */
 	rate = mode->clock / (mode->vtotal - mode->vsync_end);
 
-	if (rate > 8250) {
-		dev_dbg(dev, "invalid rate: %lu (>8250): " DRM_MODE_FMT "\n",
-			rate, DRM_MODE_ARG(mode));
+	if (rate > MERGE_MAX_PREFETCH_RATE) {
+		dev_dbg(dev, "invalid rate: %lu (>%u): " DRM_MODE_FMT "\n",
+			rate, MERGE_MAX_PREFETCH_RATE, DRM_MODE_ARG(mode));
 		return MODE_BAD;
 	}
 
