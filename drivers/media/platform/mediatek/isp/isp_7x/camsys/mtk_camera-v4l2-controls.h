@@ -9,6 +9,7 @@
 #include <linux/videodev2.h>
 #include <linux/v4l2-controls.h>
 #include <linux/mtkisp_camsys.h>
+#include "mtk_cam-v4l2-compat.h"
 
 /* Allowed value of V4L2_CID_MTK_CAM_RAW_PATH_SELECT */
 #define V4L2_MTK_CAM_RAW_PATH_SELECT_BPC	1

@@ -14,4 +14,4 @@ include $(src)/mtk_csi_phy_2_0/Makefile
 
 obj-$(CONFIG_VIDEO_MTK_ISP_71_CAMSYS) += mtk-cam-plat-util.o
 obj-$(CONFIG_VIDEO_MTK_ISP_71_CAMSYS) += mtk-cam-isp.o
-ccflags-y += -DISP7_1
+ccflags-y += -DISP7_1 -I$(src)/include/uapi

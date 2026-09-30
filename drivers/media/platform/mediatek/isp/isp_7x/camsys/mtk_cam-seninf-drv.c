@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 // Copyright (c) 2022 MediaTek Inc.
 
+#include <linux/of_platform.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/platform_device.h>
@@ -427,7 +428,7 @@ static int seninf_core_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int seninf_core_remove(struct platform_device *pdev)
+static void seninf_core_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct seninf_core *core = dev_get_drvdata(dev);
@@ -440,7 +441,6 @@ static int seninf_core_remove(struct platform_device *pdev)
 
 	dev_dbg(dev, "camsys | start %s\n", __func__);
 
-	return 0;
 }
 
 static const struct of_device_id seninf_core_of_match[] = {
@@ -560,7 +560,7 @@ static int mtk_cam_seninf_init_cfg(struct v4l2_subdev *sd,
 	unsigned int i;
 
 	for (i = 0; i < sd->entity.num_pads; i++) {
-		mf = v4l2_subdev_get_try_format(sd, sd_state, i);
+		mf = v4l2_subdev_state_get_format(sd_state, i);
 		*mf = fmt_default;
 	}
 
@@ -581,7 +581,7 @@ static int mtk_cam_seninf_set_fmt(struct v4l2_subdev *sd,
 	format = &ctx->fmt[fmt->pad].format;
 
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY) {
-		*v4l2_subdev_get_try_format(sd, sd_state, fmt->pad) = fmt->format;
+		*v4l2_subdev_state_get_format(sd_state, fmt->pad) = fmt->format;
 		dev_dbg(ctx->dev,
 			"s_fmt pad %d code/res 0x%x/%dx%d which %d=> 0x%x/%dx%d\n",
 			fmt->pad,
@@ -633,7 +633,7 @@ static int mtk_cam_seninf_get_fmt(struct v4l2_subdev *sd,
 
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY) {
 		fmt->format =
-			*v4l2_subdev_get_try_format(sd, sd_state, fmt->pad);
+			*v4l2_subdev_state_get_format(sd_state, fmt->pad);
 	} else {
 		fmt->format.code = format->code;
 		fmt->format.width = format->width;
@@ -872,11 +872,10 @@ static int get_buffered_pixel_rate(struct seninf_ctx *ctx,
 
 	memset(&fi, 0, sizeof(fi));
 	fi.pad = sd_pad_idx;
-	ret = v4l2_subdev_call(sd, video, g_frame_interval, &fi);
-	if (ret) {
-		dev_info(ctx->dev, "no g_frame_interval in %s\n", sd->name);
-		return ret;
-	}
+	fi.which = V4L2_SUBDEV_FORMAT_ACTIVE;
+	ret = v4l2_subdev_call_state_active(sd, pad, get_frame_interval, &fi);
+	if (ret)
+		fi.interval.numerator = 0;
 
 	ctrl = v4l2_ctrl_find(sd->ctrl_handler, V4L2_CID_HBLANK);
 	if (!ctrl) {
@@ -893,6 +892,21 @@ static int get_buffered_pixel_rate(struct seninf_ctx *ctx,
 	}
 
 	vblank = v4l2_ctrl_g_ctrl(ctrl);
+
+	if (!fi.interval.numerator) {
+		s64 pclk;
+
+		ctrl = v4l2_ctrl_find(sd->ctrl_handler, V4L2_CID_PIXEL_RATE);
+		if (!ctrl) {
+			dev_info(ctx->dev, "no frame interval or pixel rate in %s\n",
+				 sd->name);
+			return -EINVAL;
+		}
+
+		pclk = v4l2_ctrl_g_ctrl_int64(ctrl);
+		fi.interval.numerator = (width + hblank) * (height + vblank);
+		fi.interval.denominator = pclk;
+	}
 
 	/* update fps */
 	ctx->fps_n = fi.interval.denominator;
@@ -1070,7 +1084,6 @@ static int seninf_s_stream(struct v4l2_subdev *sd, int enable)
 
 static const struct v4l2_subdev_pad_ops seninf_subdev_pad_ops = {
 	.link_validate = mtk_cam_link_validate,
-	.init_cfg = mtk_cam_seninf_init_cfg,
 	.set_fmt = mtk_cam_seninf_set_fmt,
 	.get_fmt = mtk_cam_seninf_get_fmt,
 };
@@ -1131,7 +1144,7 @@ static const struct media_entity_operations seninf_media_ops = {
 };
 
 struct sensor_async_subdev {
-	struct v4l2_async_subdev asd;
+	struct v4l2_async_connection asd;
 	u32 port;
 	u32 bus_type;
 	u32 lanes;
@@ -1139,7 +1152,7 @@ struct sensor_async_subdev {
 
 static int seninf_notifier_bound(struct v4l2_async_notifier *notifier,
 				 struct v4l2_subdev *sd,
-				 struct v4l2_async_subdev *asd)
+				 struct v4l2_async_connection *asd)
 {
 	struct seninf_ctx *ctx = notifier_to_ctx(notifier);
 	struct sensor_async_subdev *s_asd =
@@ -1171,7 +1184,7 @@ static int seninf_notifier_bound(struct v4l2_async_notifier *notifier,
 
 static void seninf_notifier_unbind(struct v4l2_async_notifier *notifier,
 				   struct v4l2_subdev *sd,
-				   struct v4l2_async_subdev *asd)
+				   struct v4l2_async_connection *asd)
 {
 	struct seninf_ctx *ctx = notifier_to_ctx(notifier);
 
@@ -1269,6 +1282,7 @@ static int seninf_close(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
 }
 
 static const struct v4l2_subdev_internal_ops seninf_internal_ops = {
+	.init_state = mtk_cam_seninf_init_cfg,
 	.open = seninf_open,
 	.close = seninf_close,
 };
@@ -1311,10 +1325,8 @@ err_free_handler:
 
 static int seninf_parse_endpoint(struct device *dev,
 				 struct v4l2_fwnode_endpoint *vep,
-				 struct v4l2_async_subdev *asd)
+				 struct sensor_async_subdev *s_asd)
 {
-	struct sensor_async_subdev *s_asd =
-		container_of(asd, struct sensor_async_subdev, asd);
 	struct fwnode_handle *remote_hnd;
 
 	if (vep->bus_type != V4L2_MBUS_CSI2_DPHY &&
@@ -1362,6 +1374,7 @@ static int register_subdev(struct seninf_ctx *ctx)
 	struct device *dev = ctx->dev;
 	struct media_pad *pads = ctx->pads;
 	struct v4l2_async_notifier *notifier = &ctx->notifier;
+	struct fwnode_handle *ep;
 
 	v4l2_subdev_init(sd, &seninf_subdev_ops);
 
@@ -1403,15 +1416,29 @@ static int register_subdev(struct seninf_ctx *ctx)
 	}
 
 	/* register seninf as sensor async parent */
-	v4l2_async_nf_init(notifier);
-	ret = v4l2_async_nf_parse_fwnode_endpoints(dev, notifier,
-						   sizeof(struct sensor_async_subdev),
-						   seninf_parse_endpoint);
-	if (ret < 0)
-		dev_info(dev, "no endpoint\n");
+	v4l2_async_subdev_nf_init(notifier, sd);
+	fwnode_graph_for_each_endpoint(dev_fwnode(dev), ep) {
+		struct v4l2_fwnode_endpoint vep = { .bus_type = V4L2_MBUS_UNKNOWN };
+		struct sensor_async_subdev parsed, *s_asd;
+
+		if (v4l2_fwnode_endpoint_parse(ep, &vep) ||
+		    seninf_parse_endpoint(dev, &vep, &parsed))
+			continue;
+
+		s_asd = v4l2_async_nf_add_fwnode_remote(notifier, ep,
+							 struct sensor_async_subdev);
+		if (IS_ERR(s_asd)) {
+			dev_info(dev, "no remote for endpoint\n");
+			continue;
+		}
+
+		s_asd->port = parsed.port;
+		s_asd->bus_type = parsed.bus_type;
+		s_asd->lanes = parsed.lanes;
+	}
 
 	notifier->ops = &seninf_async_ops;
-	ret = v4l2_async_subdev_nf_register(sd, notifier);
+	ret = v4l2_async_nf_register(notifier);
 	if (ret < 0) {
 		dev_info(dev, "failed to register notifier\n");
 		goto err_unregister_subdev;
@@ -1592,7 +1619,7 @@ static const struct dev_pm_ops pm_ops = {
 	SET_RUNTIME_PM_OPS(runtime_suspend, runtime_resume, NULL)
 };
 
-static int seninf_remove(struct platform_device *pdev)
+static void seninf_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct seninf_ctx *ctx = dev_get_drvdata(dev);
@@ -1612,7 +1639,6 @@ static int seninf_remove(struct platform_device *pdev)
 
 	dev_dbg(dev, "camsys | start %s\n", __func__);
 
-	return 0;
 }
 
 static const struct of_device_id seninf_of_match[] = {
