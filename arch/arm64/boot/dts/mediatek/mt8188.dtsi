@@ -471,10 +471,17 @@
 	thermal_zones: thermal-zones {
 		cpu-little0-thermal {
 			polling-delay = <1000>;
-			polling-delay-passive = <150>;
+			polling-delay-passive = <100>;
 			thermal-sensors = <&lvts_mcu MT8188_MCU_LITTLE_CPU0>;
+			sustainable-power = <1500>;
 
 			trips {
+				cpu_little0_switch_on: trip-switch-on {
+					temperature = <68000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+
 				cpu_little0_alert0: trip-alert0 {
 					temperature = <85000>;
 					hysteresis = <2000>;
@@ -503,16 +510,31 @@
 							 <&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
 							 <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
 							 <&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					contribution = <2345>;
+				};
+
+				map1 {
+					trip = <&cpu_little0_alert0>;
+					cooling-device = <&cpu6 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					contribution = <1024>;
 				};
 			};
 		};
 
 		cpu-little1-thermal {
 			polling-delay = <1000>;
-			polling-delay-passive = <150>;
+			polling-delay-passive = <100>;
 			thermal-sensors = <&lvts_mcu MT8188_MCU_LITTLE_CPU1>;
+			sustainable-power = <1500>;
 
 			trips {
+				cpu_little1_switch_on: trip-switch-on {
+					temperature = <68000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+
 				cpu_little1_alert0: trip-alert0 {
 					temperature = <85000>;
 					hysteresis = <2000>;
@@ -541,16 +563,31 @@
 							 <&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
 							 <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
 							 <&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					contribution = <2345>;
+				};
+
+				map1 {
+					trip = <&cpu_little1_alert0>;
+					cooling-device = <&cpu6 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					contribution = <1024>;
 				};
 			};
 		};
 
 		cpu-little2-thermal {
 			polling-delay = <1000>;
-			polling-delay-passive = <150>;
+			polling-delay-passive = <100>;
 			thermal-sensors = <&lvts_mcu MT8188_MCU_LITTLE_CPU2>;
+			sustainable-power = <1500>;
 
 			trips {
+				cpu_little2_switch_on: trip-switch-on {
+					temperature = <68000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+
 				cpu_little2_alert0: trip-alert0 {
 					temperature = <85000>;
 					hysteresis = <2000>;
@@ -579,16 +616,31 @@
 							 <&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
 							 <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
 							 <&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					contribution = <2345>;
+				};
+
+				map1 {
+					trip = <&cpu_little2_alert0>;
+					cooling-device = <&cpu6 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					contribution = <1024>;
 				};
 			};
 		};
 
 		cpu-little3-thermal {
 			polling-delay = <1000>;
-			polling-delay-passive = <150>;
+			polling-delay-passive = <100>;
 			thermal-sensors = <&lvts_mcu MT8188_MCU_LITTLE_CPU3>;
+			sustainable-power = <1500>;
 
 			trips {
+				cpu_little3_switch_on: trip-switch-on {
+					temperature = <68000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+
 				cpu_little3_alert0: trip-alert0 {
 					temperature = <85000>;
 					hysteresis = <2000>;
@@ -617,6 +669,14 @@
 							 <&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
 							 <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
 							 <&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					contribution = <2345>;
+				};
+
+				map1 {
+					trip = <&cpu_little3_alert0>;
+					cooling-device = <&cpu6 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					contribution = <1024>;
 				};
 			};
 		};
@@ -625,8 +685,15 @@
 			polling-delay = <1000>;
 			polling-delay-passive = <100>;
 			thermal-sensors = <&lvts_mcu MT8188_MCU_BIG_CPU0>;
+			sustainable-power = <1500>;
 
 			trips {
+				cpu_big0_switch_on: trip-switch-on {
+					temperature = <68000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+
 				cpu_big0_alert0: trip-alert0 {
 					temperature = <85000>;
 					hysteresis = <2000>;
@@ -647,10 +714,22 @@
 			};
 
 			cooling-maps {
-				map0 {
+				cpu_big0_cooling_map0: map0 {
+					trip = <&cpu_big0_alert0>;
+					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu2 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					contribution = <2345>;
+				};
+
+				map1 {
 					trip = <&cpu_big0_alert0>;
 					cooling-device = <&cpu6 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
 							 <&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					contribution = <1024>;
 				};
 			};
 		};
@@ -659,8 +738,15 @@
 			polling-delay = <1000>;
 			polling-delay-passive = <100>;
 			thermal-sensors = <&lvts_mcu MT8188_MCU_BIG_CPU1>;
+			sustainable-power = <1500>;
 
 			trips {
+				cpu_big1_switch_on: trip-switch-on {
+					temperature = <68000>;
+					hysteresis = <2000>;
+					type = "passive";
+				};
+
 				cpu_big1_alert0: trip-alert0 {
 					temperature = <85000>;
 					hysteresis = <2000>;
@@ -681,10 +767,22 @@
 			};
 
 			cooling-maps {
-				map0 {
+				cpu_big1_cooling_map0: map0 {
+					trip = <&cpu_big1_alert0>;
+					cooling-device = <&cpu0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu2 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu4 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&cpu5 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					contribution = <2345>;
+				};
+
+				map1 {
 					trip = <&cpu_big1_alert0>;
 					cooling-device = <&cpu6 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
 							 <&cpu7 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+					contribution = <1024>;
 				};
 			};
 		};
