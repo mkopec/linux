@@ -4,6 +4,7 @@
  */
 /dts-v1/;
 #include "mt8188-geralt.dtsi"
+#include "mt8188-geralt-ciri-camera.dtsi"
 
 &aud_etdm_hp_on {
 	pins-mclk {
