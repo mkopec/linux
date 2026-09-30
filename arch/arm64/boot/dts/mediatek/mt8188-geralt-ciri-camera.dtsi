@@ -1,0 +1,205 @@
+// SPDX-License-Identifier: GPL-2.0
+/* Copyright (c) 2023 MediaTek Inc. */
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/media/video-interfaces.h>
+
+/ {
+	pp1200_ucam_x: pp1200-ucam-x {
+		compatible = "regulator-fixed";
+		regulator-name = "pp1200_ucam_x";
+		gpio = <&pio 140 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pp1200_ucam_x_pins>;
+	};
+
+	pp2800_wcam_x: pp2800-wcam-x {
+		compatible = "regulator-fixed";
+		regulator-name = "pp2800_wcam_x";
+		gpio = <&pio 142 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pp2800_wcam_x_pins>;
+	};
+};
+
+&seninf_top {
+	status = "okay";
+
+		seninf_csi_port_0: csi-receiver@0 {
+			compatible = "mediatek,seninf";
+			csi-port = "0";
+			port {
+				seninf_csi_port_0_in_2: endpoint@2 {
+					data-lanes = <1 2 3 4>;
+					remote-endpoint = <&main_sensor_out_2>;
+				};
+			};
+		};
+
+		seninf_csi_port_1: csi-receiver@1 {
+			compatible = "mediatek,seninf";
+			csi-port = "1";
+			port {
+				seninf_csi_port_1_in_2: endpoint@2 {
+					data-lanes = <1 4>;
+					remote-endpoint = <&sub_sensor_out_2>;
+				};
+			};
+		};
+};
+
+&pio {
+	camera_main_sensor_pins: camera-main-sensor-pins {
+		pins-cmd-dat {
+			pinmux = <PINMUX_GPIO22__FUNC_O_CMMCLK0>;
+			drive-strength = <MTK_DRIVE_2mA>;
+		};
+	};
+
+	camera_sub_sensor_pins: camera-sub-sensor-pins {
+		pins-cmd-dat {
+			pinmux = <PINMUX_GPIO23__FUNC_O_CMMCLK1>;
+			drive-strength = <MTK_DRIVE_2mA>;
+		};
+	};
+
+	pp1200_ucam_x_pins: pp1200-ucam-x-pins {
+		pins-cmd-dat {
+			pinmux = <PINMUX_GPIO140__FUNC_B_GPIO140>;
+			output-low;
+		};
+	};
+
+	pp2800_wcam_x_pins: pp2800-wcam-x-pins {
+		pins-cmd-dat {
+			pinmux = <PINMUX_GPIO142__FUNC_B_GPIO142>;
+			output-low;
+		};
+	};
+};
+
+&mt6359_vibr_ldo_reg {
+	regulator-min-microvolt = <2800000>;
+	regulator-max-microvolt = <2800000>;
+};
+
+&i2c5 {
+	clock-frequency = <400000>;
+	vbus-supply = <&mt6359_vcamio_ldo_reg>;
+	status = "okay";
+
+	camera-sub-sensor@37 {
+		compatible = "galaxycore,gc05a2";
+		reg = <0x37>;
+
+		orientation = <0>;
+		rotation = <0>;
+
+		clocks = <&topckgen CLK_TOP_CAMTG2>;
+
+		reset-gpios = <&pio 21 GPIO_ACTIVE_LOW>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&camera_sub_sensor_pins>;
+
+		dovdd-supply = <&mt6359_vcamio_ldo_reg>;
+		avdd-supply = <&mt6359_vio28_ldo_reg>;
+		dvdd-supply = <&pp1200_ucam_x>;
+
+		port {
+			sub_sensor_out_2: endpoint {
+				bus-type = <MEDIA_BUS_TYPE_CSI2_DPHY>;
+				data-lanes = <1 4>;
+				link-frequencies = /bits/ 64 <448000000 224000000>;
+				remote-endpoint = <&seninf_csi_port_1_in_2>;
+			};
+		};
+	};
+
+	eeprom@50 {
+		compatible = "atmel,24c64";
+		reg = <0x50>;
+		pagesize = <32>;
+		vcc-supply = <&mt6359_vcamio_ldo_reg>;
+	};
+};
+
+&i2c6 {
+	clock-frequency = <400000>;
+	vbus-supply = <&mt6359_vrf18_ldo_reg>;
+	status = "okay";
+
+	camera_main_lens: camera-main-lens@c {
+		compatible = "giantec,gt9769";
+		reg = <0x0c>;
+
+		vin-supply = <&mt6359_vrf18_ldo_reg>;
+		vdd-supply = <&mt6359_vibr_ldo_reg>;
+	};
+
+	camera-main-sensor@31 {
+		compatible = "galaxycore,gc08a3";
+		reg = <0x31>;
+
+		orientation = <1>;
+		rotation = <0>;
+
+		clocks = <&topckgen CLK_TOP_CAMTG>;
+
+		reset-gpios = <&pio 19 GPIO_ACTIVE_LOW>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&camera_main_sensor_pins>;
+
+		dovdd-supply = <&mt6359_vrf18_ldo_reg>;
+		avdd-supply = <&mt6359_vfe28_ldo_reg>;
+		dvdd-supply = <&pp2800_wcam_x>;
+
+		lens-focus = <&camera_main_lens>;
+
+		port {
+			main_sensor_out_2: endpoint {
+				bus-type = <MEDIA_BUS_TYPE_CSI2_DPHY>;
+				data-lanes = <1 2 3 4>;
+				link-frequencies = /bits/ 64 <336000000 207000000>;
+				remote-endpoint = <&seninf_csi_port_0_in_2>;
+			};
+		};
+	};
+
+	eeprom@58 {
+		compatible = "atmel,24c64";
+		reg = <0x58>;
+		pagesize = <32>;
+		vcc-supply = <&mt6359_vibr_ldo_reg>;
+	};
+};
+
+
+&scp_c1 {
+	firmware-name = "mediatek/mt8188/scp-dual.img";
+	memory-region = <&scp_dual_mem>, <&scp_isp_cma>;
+	status = "okay";
+};
+
+&camisp {
+	status = "okay";
+};
+
+&cam_raw_a {
+	status = "okay";
+};
+
+&cam_yuv_a {
+	status = "okay";
+};
+
+&cam_raw_b {
+	status = "okay";
+};
+
+&cam_yuv_b {
+	status = "okay";
+};
