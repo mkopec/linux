@@ -550,15 +550,20 @@ static int config_rsz_subfrm(struct mdp_comp_ctx *ctx,
 	if (CFG_CHECK(MT8195, p_id)) {
 		struct device *dev;
 		struct mdp_comp *merge;
-		const struct mtk_mdp_driver_data *data = ctx->comp->mdp_dev->mdp_data;
 		enum mtk_mdp_comp_id public_id = ctx->comp->public_id;
 
+		/*
+		 * The VPPSYS1 switch is selected by the SVPP pipe the resizer is
+		 * in, not by its alias, which is 1 and 2 on MT8188 without RSZ1.
+		 */
 		switch (public_id) {
 		case MDP_COMP_RSZ2:
 			merge = ctx->comp->mdp_dev->comp[MDP_COMP_MERGE2];
+			id = 2;
 			break;
 		case MDP_COMP_RSZ3:
 			merge = ctx->comp->mdp_dev->comp[MDP_COMP_MERGE3];
+			id = 3;
 			break;
 		default:
 			goto rsz_subfrm_done;
@@ -567,7 +572,6 @@ static int config_rsz_subfrm(struct mdp_comp_ctx *ctx,
 		if (CFG_CHECK(MT8195, p_id))
 			reg = CFG_COMP(MT8195, ctx->param, rsz.subfrms[index].rsz_switch);
 
-		id = data->comp_data[public_id].match.alias_id;
 		dev = ctx->comp->mdp_dev->mm_subsys[MDP_MM_SUBSYS_1].mmsys;
 		mtk_mmsys_vpp_rsz_merge_config(dev, id, reg, NULL);
 
