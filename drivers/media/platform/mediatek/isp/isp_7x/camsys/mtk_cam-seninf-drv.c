@@ -574,6 +574,7 @@ static int mtk_cam_seninf_set_fmt(struct v4l2_subdev *sd,
 	struct seninf_ctx *ctx = sd_to_ctx(sd);
 	struct v4l2_mbus_framefmt *format;
 	char sink_format_changed = 0;
+	unsigned int i;
 
 	if (fmt->pad < PAD_SINK || fmt->pad >= PAD_MAXCNT)
 		return -EINVAL;
@@ -582,6 +583,9 @@ static int mtk_cam_seninf_set_fmt(struct v4l2_subdev *sd,
 
 	if (fmt->which == V4L2_SUBDEV_FORMAT_TRY) {
 		*v4l2_subdev_state_get_format(sd_state, fmt->pad) = fmt->format;
+		if (fmt->pad == PAD_SINK)
+			for (i = PAD_SINK + 1; i < PAD_MAXCNT; i++)
+				*v4l2_subdev_state_get_format(sd_state, i) = fmt->format;
 		dev_dbg(ctx->dev,
 			"s_fmt pad %d code/res 0x%x/%dx%d which %d=> 0x%x/%dx%d\n",
 			fmt->pad,
@@ -600,6 +604,13 @@ static int mtk_cam_seninf_set_fmt(struct v4l2_subdev *sd,
 		format->code = fmt->format.code;
 		format->width = fmt->format.width;
 		format->height = fmt->format.height;
+
+		if (sink_format_changed)
+			for (i = PAD_SINK + 1; i < PAD_MAXCNT; i++) {
+				ctx->fmt[i].format.code = fmt->format.code;
+				ctx->fmt[i].format.width = fmt->format.width;
+				ctx->fmt[i].format.height = fmt->format.height;
+			}
 
 		if (sink_format_changed && !ctx->is_test_model)
 			mtk_cam_seninf_get_vcinfo(ctx);
