@@ -2745,6 +2745,9 @@ static int mtk_raw_set_sink_pad_fmt(struct v4l2_subdev *sd,
 		else
 			source_fmt->height = framefmt->height;
 
+		if (i == MTK_RAW_MAIN_STREAM_OUT)
+			source_fmt->code = framefmt->code;
+
 		dev_dbg(dev,
 			"%s(%d): Propagate to pad:%d(%s), (0x%x/%d/%d)\n",
 			__func__, fmt->which, fmt->pad, node->desc.name,
