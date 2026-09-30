@@ -1537,6 +1537,8 @@ int mtk_cam_video_register(struct mtk_cam_video_device *video,
 	vdev->entity.ops = NULL;
 	vdev->fops = &mtk_cam_v4l2_fops;
 	vdev->device_caps = video->desc.cap | V4L2_CAP_STREAMING;
+	if (video->desc.id == MTK_RAW_MAIN_STREAM_OUT)
+		vdev->device_caps |= V4L2_CAP_IO_MC;
 	vdev->v4l2_dev = v4l2_dev;
 
 	vdev->vfl_dir = output ? VFL_DIR_TX : VFL_DIR_RX;
@@ -1622,10 +1624,82 @@ int mtk_cam_vidioc_enum_framesizes(struct file *filp, void *priv,
 	return 0;
 }
 
+static unsigned int mtk_cam_get_fourcc_pixel_id(u32 fourcc)
+{
+	switch (fourcc) {
+	case V4L2_PIX_FMT_SBGGR8:
+	case V4L2_PIX_FMT_SBGGR10:
+	case V4L2_PIX_FMT_SBGGR10P:
+	case V4L2_PIX_FMT_SBGGR12:
+	case V4L2_PIX_FMT_SBGGR14:
+	case V4L2_PIX_FMT_SBGGR16:
+	case V4L2_PIX_FMT_MTISP_SBGGR10:
+	case V4L2_PIX_FMT_MTISP_SBGGR12:
+	case V4L2_PIX_FMT_MTISP_SBGGR14:
+		return MTKCAM_IPI_BAYER_PXL_ID_B;
+	case V4L2_PIX_FMT_SGBRG8:
+	case V4L2_PIX_FMT_SGBRG10:
+	case V4L2_PIX_FMT_SGBRG10P:
+	case V4L2_PIX_FMT_SGBRG12:
+	case V4L2_PIX_FMT_SGBRG14:
+	case V4L2_PIX_FMT_SGBRG16:
+	case V4L2_PIX_FMT_MTISP_SGBRG10:
+	case V4L2_PIX_FMT_MTISP_SGBRG12:
+	case V4L2_PIX_FMT_MTISP_SGBRG14:
+		return MTKCAM_IPI_BAYER_PXL_ID_GB;
+	case V4L2_PIX_FMT_SGRBG8:
+	case V4L2_PIX_FMT_SGRBG10:
+	case V4L2_PIX_FMT_SGRBG10P:
+	case V4L2_PIX_FMT_SGRBG12:
+	case V4L2_PIX_FMT_SGRBG14:
+	case V4L2_PIX_FMT_SGRBG16:
+	case V4L2_PIX_FMT_MTISP_SGRBG10:
+	case V4L2_PIX_FMT_MTISP_SGRBG12:
+	case V4L2_PIX_FMT_MTISP_SGRBG14:
+		return MTKCAM_IPI_BAYER_PXL_ID_GR;
+	case V4L2_PIX_FMT_SRGGB8:
+	case V4L2_PIX_FMT_SRGGB10:
+	case V4L2_PIX_FMT_SRGGB10P:
+	case V4L2_PIX_FMT_SRGGB12:
+	case V4L2_PIX_FMT_SRGGB14:
+	case V4L2_PIX_FMT_SRGGB16:
+	case V4L2_PIX_FMT_MTISP_SRGGB10:
+	case V4L2_PIX_FMT_MTISP_SRGGB12:
+	case V4L2_PIX_FMT_MTISP_SRGGB14:
+		return MTKCAM_IPI_BAYER_PXL_ID_R;
+	default:
+		return MTKCAM_IPI_BAYER_PXL_ID_UNKNOWN;
+	}
+}
+
 int mtk_cam_vidioc_enum_fmt(struct file *file, void *fh,
 			    struct v4l2_fmtdesc *f)
 {
 	struct mtk_cam_video_device *node = file_to_mtk_cam_node(file);
+	unsigned int i, n = 0, pxl_id;
+	u32 fourcc;
+
+	if (f->mbus_code && node->desc.id == MTK_RAW_MAIN_STREAM_OUT) {
+		pxl_id = mtk_cam_get_sensor_pixel_id(f->mbus_code);
+		if (pxl_id == MTKCAM_IPI_BAYER_PXL_ID_UNKNOWN)
+			return -EINVAL;
+
+		for (i = 0; i < node->desc.num_fmts; i++) {
+			fourcc = node->desc.fmts[i].vfmt.fmt.pix_mp.pixelformat;
+			if (mtk_cam_get_fourcc_pixel_id(fourcc) != pxl_id)
+				continue;
+			if (n++ == f->index)
+				break;
+		}
+		if (i == node->desc.num_fmts)
+			return -EINVAL;
+
+		f->pixelformat = fourcc;
+		f->flags = 0;
+		mtk_cam_fill_ext_fmtdesc(f);
+
+		return 0;
+	}
 
 	if (f->index >= node->desc.num_fmts)
 		return -EINVAL;
