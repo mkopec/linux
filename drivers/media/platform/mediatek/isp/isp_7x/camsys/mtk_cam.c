@@ -4136,7 +4136,8 @@ static void mtk_cam_master_unbound(struct v4l2_async_notifier *notifier,
 	} else if (strcmp(dev_driver_string(dev), "mtk-cam raw") == 0) {
 		struct mtk_raw_device *raw_dev = dev_get_drvdata(dev);
 
-		mtk_cam_raw_unregister_entities(&cam_dev->raw);
+		if (raw->cam_dev)
+			mtk_cam_raw_unregister_entities(&cam_dev->raw);
 
 		raw_dev->cam = NULL;
 		raw->devs[raw_dev->id] = NULL;
