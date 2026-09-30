@@ -1348,6 +1348,8 @@ void mtk_camsys_frame_done(struct mtk_cam_ctx *ctx,
 				       list);
 		list_del(&buf->list);
 		ctx->cam->dma_processing_count--;
+		buf->vbb.sequence = ctx->dma_done_seq++;
+		buf->vbb.vb2_buf.timestamp = ctx->last_sof_mono_ns;
 		vb2_buffer_done(&buf->vbb.vb2_buf, VB2_BUF_STATE_DONE);
 		is_pending_buffer = true;
 	}
@@ -1491,6 +1493,8 @@ static int mtk_camsys_event_handle_raw(struct mtk_cam_device *cam,
 			dev_info(raw_dev->dev, "skip sof event when vf off\n");
 			return 0;
 		}
+		ctx->last_sof_mono_ns = ktime_get_ns() -
+			(ktime_get_boottime_ns() - irq_info->ts_ns);
 		mtk_camsys_raw_frame_start(raw_dev, ctx, irq_info);
 	}
 
