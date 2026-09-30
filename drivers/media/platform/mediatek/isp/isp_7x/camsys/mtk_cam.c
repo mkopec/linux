@@ -2,6 +2,7 @@
 //
 // Copyright (c) 2022 MediaTek Inc.
 
+#include <linux/vmalloc.h>
 #include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/of_platform.h>
@@ -2932,7 +2933,7 @@ EXIT:
 
 static void mtk_ctx_watchdog_callback(struct timer_list *t)
 {
-	struct mtk_cam_ctx *ctx = from_timer(ctx, t, watchdog_timer);
+	struct mtk_cam_ctx *ctx = timer_container_of(ctx, t, watchdog_timer);
 
 	/* disable if not streaming */
 	if (!ctx->streaming)
@@ -2990,7 +2991,7 @@ static void mtk_ctx_watchdog_stop(struct mtk_cam_ctx *ctx)
 {
 	dev_info(ctx->cam->dev, "%s:ctx(%d):stop the watchdog\n",
 		 __func__, ctx->stream_id);
-	del_timer_sync(&ctx->watchdog_timer);
+	timer_delete_sync(&ctx->watchdog_timer);
 }
 
 struct mtk_cam_ctx *mtk_cam_find_ctx(struct mtk_cam_device *cam,
@@ -3793,7 +3794,7 @@ static int mtk_cam_async_add_by_driver(struct device *dev,
 {
 	struct fwnode_handle *fwnode;
 	struct device *p = NULL;
-	struct v4l2_async_subdev *asd;
+	struct v4l2_async_connection *asd;
 	int dev_num = 0;
 
 	p = platform_find_device_by_driver(NULL, &drv->driver);
@@ -3802,7 +3803,7 @@ static int mtk_cam_async_add_by_driver(struct device *dev,
 
 		fwnode = dev_fwnode(p);
 		asd = v4l2_async_nf_add_fwnode(notifier, fwnode,
-					       struct v4l2_async_subdev);
+					       struct v4l2_async_connection);
 		put_device(p);
 
 		if (IS_ERR(asd)) {
@@ -4087,7 +4088,7 @@ fail_unbind_all:
 
 static int mtk_cam_master_bound(struct v4l2_async_notifier *notifier,
 				struct v4l2_subdev *subdev,
-				struct v4l2_async_subdev *asd)
+				struct v4l2_async_connection *asd)
 {
 	struct mtk_cam_device *cam_dev =
 		container_of(notifier, struct mtk_cam_device, notifier);
@@ -4120,7 +4121,7 @@ static int mtk_cam_master_bound(struct v4l2_async_notifier *notifier,
 
 static void mtk_cam_master_unbound(struct v4l2_async_notifier *notifier,
 				   struct v4l2_subdev *subdev,
-				   struct v4l2_async_subdev *asd)
+				   struct v4l2_async_connection *asd)
 {
 	struct mtk_cam_device *cam_dev =
 		container_of(notifier, struct mtk_cam_device, notifier);
@@ -4184,10 +4185,7 @@ static int mtk_cam_probe(struct platform_device *pdev)
 			return -ENOMEM;
 	}
 
-	if (dma_set_max_seg_size(dev, UINT_MAX)) {
-		dev_err(dev, "Failed to set DMA segment size\n");
-		return -EIO;
-	}
+	dma_set_max_seg_size(dev, UINT_MAX);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res) {
@@ -4245,14 +4243,14 @@ static int mtk_cam_probe(struct platform_device *pdev)
 
 	/* register mtk_cam as all isp subdev async parent */
 	cam_dev->notifier.ops = &mtk_cam_async_nf_ops;
-	v4l2_async_nf_init(&cam_dev->notifier);
+	v4l2_async_nf_init(&cam_dev->notifier, &cam_dev->v4l2_dev);
 	ret = mtk_cam_async_subdev_add(dev); /* wait all isp sub drivers */
 	if (ret) {
 		dev_err(dev, "%s failed mtk_cam_async_subdev_add\n", __func__);
 		goto fail_unregister_sub_drivers;
 	}
 
-	ret = v4l2_async_nf_register(&cam_dev->v4l2_dev, &cam_dev->notifier);
+	ret = v4l2_async_nf_register(&cam_dev->notifier);
 	if (ret) {
 		dev_err(dev, "%s async_nf_register ret:%d\n", __func__, ret);
 		v4l2_async_nf_cleanup(&cam_dev->notifier);
@@ -4279,7 +4277,7 @@ fail_destroy_mutex:
 	return ret;
 }
 
-static int mtk_cam_remove(struct platform_device *pdev)
+static void mtk_cam_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct mtk_cam_device *cam_dev = dev_get_drvdata(dev);
@@ -4294,7 +4292,6 @@ static int mtk_cam_remove(struct platform_device *pdev)
 
 	mutex_destroy(&cam_dev->queue_lock);
 
-	return 0;
 }
 
 static const struct dev_pm_ops mtk_cam_pm_ops = {
