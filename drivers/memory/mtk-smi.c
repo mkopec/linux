@@ -14,7 +14,10 @@
 #include <linux/of.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
+#include <linux/mfd/syscon.h>
+#include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
+#include <linux/regmap.h>
 #include <linux/soc/mediatek/mtk_sip_svc.h>
 #include <soc/mediatek/smi.h>
 #include <dt-bindings/memory/mt2701-larb-port.h>
@@ -38,6 +41,12 @@
 
 /* SMI LARB */
 #define SMI_LARB_SLP_CON                0xc
+
+#define SMI_COMMON_CLAMP_EN		0x3c0
+#define SMI_COMMON_CLAMP_EN_SET		0x3c4
+#define SMI_COMMON_CLAMP_EN_CLR		0x3c8
+#define SMI_SUB_COMM_INPORT_NR		8
+#define LARB_MAX_SUB_COMMON		2
 #define SLP_PROT_EN                     BIT(0)
 #define SLP_PROT_RDY                    BIT(16)
 
@@ -157,6 +166,13 @@ struct mtk_smi_larb { /* larb: local arbiter */
 	int				larbid;
 	u32				*mmu;
 	unsigned char			*bank;
+	struct device			*dev;
+	struct regmap			*sub_comm[LARB_MAX_SUB_COMMON];
+	u32				sub_comm_inport;
+	struct regmap			*reset;
+	u32				reset_offset;
+	u32				reset_mask;
+	struct notifier_block		genpd_nb;
 };
 
 static int
@@ -641,6 +657,92 @@ static int mtk_smi_dts_clk_init(struct device *dev, struct mtk_smi *smi,
 	return ret;
 }
 
+static void mtk_smi_larb_clamp(struct mtk_smi_larb *larb, bool clamp)
+{
+	u32 val;
+	int i;
+
+	for (i = 0; i < LARB_MAX_SUB_COMMON && larb->sub_comm[i]; i++) {
+		regmap_write(larb->sub_comm[i],
+			     clamp ? SMI_COMMON_CLAMP_EN_SET : SMI_COMMON_CLAMP_EN_CLR,
+			     BIT(larb->sub_comm_inport));
+		regmap_read(larb->sub_comm[i], SMI_COMMON_CLAMP_EN, &val);
+		if (!!(val & BIT(larb->sub_comm_inport)) != clamp)
+			dev_dbg(larb->dev, "clamp inport %u failed: 0x%x\n",
+				 larb->sub_comm_inport, val);
+	}
+}
+
+static int mtk_smi_larb_genpd_notify(struct notifier_block *nb,
+				     unsigned long action, void *data)
+{
+	struct mtk_smi_larb *larb = container_of(nb, struct mtk_smi_larb, genpd_nb);
+
+	switch (action) {
+	case GENPD_NOTIFY_PRE_ON:
+	case GENPD_NOTIFY_PRE_OFF:
+		mtk_smi_larb_clamp(larb, true);
+		break;
+	case GENPD_NOTIFY_ON:
+		if (larb->reset) {
+			regmap_set_bits(larb->reset, larb->reset_offset,
+					larb->reset_mask);
+			regmap_clear_bits(larb->reset, larb->reset_offset,
+					  larb->reset_mask);
+		}
+		mtk_smi_larb_clamp(larb, false);
+		break;
+	}
+
+	return NOTIFY_OK;
+}
+
+static int mtk_smi_larb_sub_common_init(struct mtk_smi_larb *larb)
+{
+	struct device *dev = larb->dev;
+	struct device_node *np;
+	u32 args[2];
+	int i, ret;
+
+	for (i = 0; i < LARB_MAX_SUB_COMMON; i++) {
+		np = of_parse_phandle(dev->of_node, "mediatek,smi-sub-comm", i);
+		if (!np)
+			break;
+		larb->sub_comm[i] = syscon_node_to_regmap(np);
+		of_node_put(np);
+		if (IS_ERR(larb->sub_comm[i]))
+			return PTR_ERR(larb->sub_comm[i]);
+	}
+
+	if (!i)
+		return 0;
+
+	if (of_property_read_u32(dev->of_node, "mediatek,smi-sub-comm-inport",
+				 &larb->sub_comm_inport) ||
+	    larb->sub_comm_inport >= SMI_SUB_COMM_INPORT_NR)
+		return -EINVAL;
+
+	np = of_parse_phandle(dev->of_node, "mediatek,smi-reset", 0);
+	if (np) {
+		larb->reset = device_node_to_regmap(np);
+		of_node_put(np);
+		if (IS_ERR(larb->reset))
+			return PTR_ERR(larb->reset);
+		if (of_property_read_u32_index(dev->of_node, "mediatek,smi-reset", 1, &args[0]) ||
+		    of_property_read_u32_index(dev->of_node, "mediatek,smi-reset", 2, &args[1]))
+			return -EINVAL;
+		larb->reset_offset = args[0];
+		larb->reset_mask = args[1];
+	}
+
+	larb->genpd_nb.notifier_call = mtk_smi_larb_genpd_notify;
+	ret = dev_pm_genpd_add_notifier(dev, &larb->genpd_nb);
+	if (ret)
+		larb->genpd_nb.notifier_call = NULL;
+
+	return ret;
+}
+
 static int mtk_smi_larb_probe(struct platform_device *pdev)
 {
 	struct mtk_smi_larb *larb;
@@ -651,6 +753,7 @@ static int mtk_smi_larb_probe(struct platform_device *pdev)
 	if (!larb)
 		return -ENOMEM;
 
+	larb->dev = dev;
 	larb->larb_gen = of_device_get_match_data(dev);
 	larb->base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(larb->base))
@@ -668,6 +771,13 @@ static int mtk_smi_larb_probe(struct platform_device *pdev)
 		return ret;
 
 	pm_runtime_enable(dev);
+
+	ret = mtk_smi_larb_sub_common_init(larb);
+	if (ret) {
+		dev_err_probe(dev, ret, "failed to set up sub-common clamp\n");
+		goto err_pm_disable;
+	}
+
 	platform_set_drvdata(pdev, larb);
 	ret = component_add(dev, &mtk_smi_larb_component_ops);
 	if (ret)
@@ -685,6 +795,8 @@ static void mtk_smi_larb_remove(struct platform_device *pdev)
 {
 	struct mtk_smi_larb *larb = platform_get_drvdata(pdev);
 
+	if (larb->genpd_nb.notifier_call)
+		dev_pm_genpd_remove_notifier(&pdev->dev);
 	device_link_remove(&pdev->dev, larb->smi_common_dev);
 	pm_runtime_disable(&pdev->dev);
 	component_del(&pdev->dev, &mtk_smi_larb_component_ops);
@@ -830,6 +942,10 @@ static const struct mtk_smi_common_plat mtk_smi_common_mt8195_vpp = {
 	.init     = mtk_smi_common_mt8195_init,
 };
 
+static const struct mtk_smi_common_plat mtk_smi_sub_common_mt8188 = {
+	.type     = MTK_SMI_GEN2_SUB_COMM,
+};
+
 static const struct mtk_smi_common_plat mtk_smi_sub_common_mt8195 = {
 	.type     = MTK_SMI_GEN2_SUB_COMM,
 	.has_gals = true,
@@ -855,6 +971,7 @@ static const struct of_device_id mtk_smi_common_of_ids[] = {
 	{.compatible = "mediatek,mt8192-smi-common", .data = &mtk_smi_common_mt8192},
 	{.compatible = "mediatek,mt8195-smi-common-vdo", .data = &mtk_smi_common_mt8195_vdo},
 	{.compatible = "mediatek,mt8195-smi-common-vpp", .data = &mtk_smi_common_mt8195_vpp},
+	{.compatible = "mediatek,mt8188-smi-sub-common", .data = &mtk_smi_sub_common_mt8188},
 	{.compatible = "mediatek,mt8195-smi-sub-common", .data = &mtk_smi_sub_common_mt8195},
 	{.compatible = "mediatek,mt8365-smi-common", .data = &mtk_smi_common_mt8365},
 	{}
