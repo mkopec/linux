@@ -4,6 +4,8 @@
 
 #ifdef CONFIG_DEBUG_FS
 
+#include <linux/vmalloc.h>
+#include <linux/string.h>
 #include <linux/freezer.h>
 #include <linux/videodev2.h>
 #include <media/v4l2-event.h>
@@ -112,7 +114,7 @@ mtk_cam_debug_dump_all_content(struct mtk_cam_debug_fs *debug_fs,
 	struct device *dev = debug_fs->cam->dev;
 
 	header = (struct mtk_cam_dump_header *)dump_buf;
-	strncpy(header->desc, param->desc, MTK_CAM_DEBUG_DUMP_DESC_SIZE - 1);
+	strscpy_pad(header->desc, param->desc, MTK_CAM_DEBUG_DUMP_DESC_SIZE);
 	header->request_fd = param->request_fd;
 	header->stream_id = param->stream_id;
 	header->timestamp = param->timestamp;

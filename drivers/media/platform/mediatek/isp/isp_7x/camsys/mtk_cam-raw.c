@@ -2182,10 +2182,7 @@ static int mtk_raw_of_probe(struct platform_device *pdev,
 			return -ENOMEM;
 	}
 
-	if (dma_set_max_seg_size(dev, UINT_MAX)) {
-		dev_err(dev, "Failed to set DMA segment size\n");
-		return -EIO;
-	}
+	dma_set_max_seg_size(dev, UINT_MAX);
 
 	/* base outer register */
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "base");
@@ -2410,7 +2407,7 @@ static int mtk_raw_init_cfg(struct v4l2_subdev *sd,
 	struct mtk_raw *raw = pipe->raw;
 
 	for (i = 0; i < sd->entity.num_pads; i++) {
-		mf = v4l2_subdev_get_try_format(sd, sd_state, i);
+		mf = v4l2_subdev_state_get_format(sd_state, i);
 		*mf = mfmt_default;
 
 		dev_dbg(raw->cam_dev, "%s init pad:%d format:0x%x\n",
@@ -2455,7 +2452,7 @@ mtk_raw_pipeline_get_fmt(struct mtk_raw_pipeline *pipe,
 	}
 	/* format invalid and return default format */
 	if (which == V4L2_SUBDEV_FORMAT_TRY)
-		return v4l2_subdev_get_try_format(&pipe->subdev, sd_state, padid);
+		return v4l2_subdev_state_get_format(sd_state, padid);
 
 	if (WARN_ON(padid >= pipe->subdev.entity.num_pads))
 		return &pipe->cfg[0].mbus_fmt;
@@ -2476,7 +2473,7 @@ mtk_raw_pipeline_get_selection(struct mtk_raw_pipeline *pipe,
 	}
 	/* format invalid and return default format */
 	if (which == V4L2_SUBDEV_FORMAT_TRY)
-		return v4l2_subdev_get_try_crop(&pipe->subdev, sd_state, pad);
+		return v4l2_subdev_state_get_crop(sd_state, pad);
 
 	if (WARN_ON(pad >= pipe->subdev.entity.num_pads))
 		return &pipe->cfg[0].crop;
@@ -3042,6 +3039,7 @@ static int mtk_cam_media_link_setup(struct media_entity *entity,
 
 static int
 mtk_raw_s_frame_interval(struct v4l2_subdev *sd,
+			 struct v4l2_subdev_state *sd_state,
 			 struct v4l2_subdev_frame_interval *interval)
 {
 	struct mtk_raw_pipeline *pipe =
@@ -3059,6 +3057,7 @@ mtk_raw_s_frame_interval(struct v4l2_subdev *sd,
 
 static int
 mtk_raw_g_frame_interval(struct v4l2_subdev *sd,
+			 struct v4l2_subdev_state *sd_state,
 			 struct v4l2_subdev_frame_interval *interval)
 {
 	struct mtk_raw_pipeline *pipe =
@@ -3081,17 +3080,20 @@ static const struct v4l2_subdev_core_ops mtk_raw_subdev_core_ops = {
 
 static const struct v4l2_subdev_video_ops mtk_raw_subdev_video_ops = {
 	.s_stream =  mtk_raw_sd_s_stream,
-	.s_frame_interval = mtk_raw_s_frame_interval,
-	.g_frame_interval = mtk_raw_g_frame_interval,
 };
 
 static const struct v4l2_subdev_pad_ops mtk_raw_subdev_pad_ops = {
 	.link_validate = mtk_cam_link_validate,
-	.init_cfg = mtk_raw_init_cfg,
+	.get_frame_interval = mtk_raw_g_frame_interval,
+	.set_frame_interval = mtk_raw_s_frame_interval,
 	.set_fmt = mtk_raw_set_fmt,
 	.get_fmt = mtk_raw_get_fmt,
 	.set_selection = mtk_raw_set_pad_selection,
 	.get_selection = mtk_raw_get_pad_selection,
+};
+
+static const struct v4l2_subdev_internal_ops mtk_raw_internal_ops = {
+	.init_state = mtk_raw_init_cfg,
 };
 
 static const struct v4l2_subdev_ops mtk_raw_subdev_ops = {
@@ -4682,6 +4684,7 @@ static int mtk_raw_pipeline_register(unsigned int id, struct device *dev,
 
 	/* Initialize raw_pipe subdev */
 	v4l2_subdev_init(sd, &mtk_raw_subdev_ops);
+	sd->internal_ops = &mtk_raw_internal_ops;
 	sd->entity.function = MEDIA_ENT_F_PROC_VIDEO_PIXEL_FORMATTER;
 	sd->entity.ops = &mtk_cam_media_entity_ops;
 	sd->flags = V4L2_SUBDEV_FL_HAS_DEVNODE | V4L2_SUBDEV_FL_HAS_EVENTS;
@@ -4864,6 +4867,7 @@ static int mtk_raw_probe(struct platform_device *pdev)
 	/* register raw as mtk_cam async child */
 	sd = &raw_dev->subdev;
 	v4l2_subdev_init(sd, &mtk_raw_subdev_ops);
+	sd->internal_ops = &mtk_raw_internal_ops;
 	snprintf(sd->name, sizeof(sd->name), "%s",
 		 of_node_full_name(dev->of_node));
 	sd->dev = dev;
@@ -4883,7 +4887,7 @@ static int mtk_raw_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int mtk_raw_remove(struct platform_device *pdev)
+static void mtk_raw_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct mtk_raw_device *raw_dev = dev_get_drvdata(dev);
@@ -4895,7 +4899,6 @@ static int mtk_raw_remove(struct platform_device *pdev)
 
 	v4l2_async_unregister_subdev(sd);
 
-	return 0;
 }
 
 static int mtk_raw_runtime_suspend(struct device *dev)
@@ -5070,10 +5073,7 @@ static int mtk_yuv_of_probe(struct platform_device *pdev,
 			return -ENOMEM;
 	}
 
-	if (dma_set_max_seg_size(dev, UINT_MAX)) {
-		dev_err(dev, "Failed to set DMA segment size\n");
-		return -EIO;
-	}
+	dma_set_max_seg_size(dev, UINT_MAX);
 
 	/* base outer register */
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "base");
@@ -5148,6 +5148,7 @@ static int mtk_yuv_probe(struct platform_device *pdev)
 	/* register yuv as mtk_cam async child */
 	sd = &drvdata->subdev;
 	v4l2_subdev_init(sd, &mtk_raw_subdev_ops);
+	sd->internal_ops = &mtk_raw_internal_ops;
 	snprintf(sd->name, sizeof(sd->name), "%s",
 		 of_node_full_name(dev->of_node));
 	sd->dev = dev;
@@ -5166,7 +5167,7 @@ static int mtk_yuv_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int mtk_yuv_remove(struct platform_device *pdev)
+static void mtk_yuv_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct mtk_yuv_device *yuv_dev = dev_get_drvdata(dev);
@@ -5180,7 +5181,6 @@ static int mtk_yuv_remove(struct platform_device *pdev)
 
 	v4l2_async_unregister_subdev(sd);
 
-	return 0;
 }
 
 /* driver for yuv part */
