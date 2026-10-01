@@ -4,4 +4,5 @@ obj-y += mdp/
 obj-y += vcodec/
 obj-y += vpu/
 obj-y += mdp3/
+obj-y += aie/
 obj-y += isp/isp_7x/
