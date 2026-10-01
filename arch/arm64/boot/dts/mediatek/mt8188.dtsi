@@ -2527,7 +2527,8 @@
 			interrupts = <GIC_SPI 594 IRQ_TYPE_LEVEL_HIGH 0>;
 			power-domains = <&spm MT8188_POWER_DOMAIN_VPPSYS0>;
 			#iommu-cells = <1>;
-			mediatek,larbs = <&larb1 &larb3 &larb4 &larb6 &larb7 &larb14
+			mediatek,larbs = <&larb1 &larb3 &larb4 &larb6 &larb7
+					  &larb11b &larb12 &larb14 &larb15
 					  &larb16a &larb17a &larb23>;
 		};
 
@@ -4405,7 +4406,8 @@
 			interrupts = <GIC_SPI 673 IRQ_TYPE_LEVEL_HIGH 0>;
 			power-domains = <&spm MT8188_POWER_DOMAIN_VDOSYS0>;
 			#iommu-cells = <1>;
-			mediatek,larbs = <&larb0 &larb2 &larb5 &larb13 &larb16b
+			mediatek,larbs = <&larb0 &larb2 &larb5 &larb9 &larb10
+					  &larb11a &larb11c &larb13 &larb16b
 					  &larb17b &larb19 &larb21>;
 		};
 
