@@ -7,6 +7,8 @@
  */
 
 #include "linux/videodev2.h"
+#include <linux/of_platform.h>
+#include <linux/vmalloc.h>
 #include <linux/dma-mapping.h>
 #include <linux/platform_device.h>
 #include <linux/module.h>
@@ -50,7 +52,6 @@ static int mtk_imgsys_larb_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct mtk_imgsys_larb_device   *larb_dev;
-	int ret;
 
 	larb_dev = devm_kzalloc(dev, sizeof(*dev), GFP_KERNEL);
 	if (!larb_dev)
@@ -66,24 +67,19 @@ static int mtk_imgsys_larb_probe(struct platform_device *pdev)
 			return -ENOMEM;
 	}
 
-	if (dev->dma_parms) {
-		ret = dma_set_max_seg_size(dev, UINT_MAX);
-		if (ret)
-			dev_err(dev, "Failed to set DMA segment size\n");
-	}
+	if (dev->dma_parms)
+		dma_set_max_seg_size(dev, UINT_MAX);
 
 	pm_runtime_enable(dev);
 
 	return 0;
 }
 
-static int mtk_imgsys_larb_remove(struct platform_device *pdev)
+static void mtk_imgsys_larb_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 
 	pm_runtime_disable(dev);
-
-	return 0;
 }
 
 static const struct of_device_id mtk_imgsys_larb_match[] = {
@@ -485,8 +481,6 @@ static const struct vb2_ops mtk_imgsys_vb2_meta_ops = {
 	.buf_cleanup = mtk_imgsys_vb2_queue_meta_buf_cleanup,
 	.start_streaming = mtk_imgsys_vb2_start_streaming,
 	.stop_streaming = mtk_imgsys_vb2_stop_streaming,
-	.wait_prepare = vb2_ops_wait_prepare,
-	.wait_finish = vb2_ops_wait_finish,
 	.buf_request_complete = mtk_imgsys_vb2_request_complete,
 };
 
@@ -498,8 +492,6 @@ static const struct vb2_ops mtk_imgsys_vb2_video_ops = {
 	.buf_out_validate = mtk_imgsys_vb2_buf_out_validate,
 	.start_streaming = mtk_imgsys_vb2_start_streaming,
 	.stop_streaming = mtk_imgsys_vb2_stop_streaming,
-	.wait_prepare = vb2_ops_wait_prepare,
-	.wait_finish = vb2_ops_wait_finish,
 	.buf_request_complete = mtk_imgsys_vb2_request_complete,
 };
 
@@ -1096,7 +1088,7 @@ static int mtk_imgsys_video_device_v4l2_register(struct mtk_imgsys_pipe *pipe,
 	vbq->requires_requests = true;
 	vbq->buf_struct_size = sizeof(struct mtk_imgsys_dev_buffer);
 	vbq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
-	vbq->min_buffers_needed = 0;
+	vbq->min_queued_buffers = 0;
 	vbq->drv_priv = pipe;
 	vbq->lock = &node->dev_q.lock;
 	vbq->max_num_buffers = IMGSYS_MAX_BUFFERS;
@@ -1661,11 +1653,8 @@ static int mtk_imgsys_probe(struct platform_device *pdev)
 		pdev->dev.dma_parms =
 			devm_kzalloc(imgsys_dev->dev, sizeof(*pdev->dev.dma_parms), GFP_KERNEL);
 	}
-	if (pdev->dev.dma_parms) {
-		ret = dma_set_max_seg_size(imgsys_dev->dev, UINT_MAX);
-		if (ret)
-			dev_info(imgsys_dev->dev, "Failed to set DMA segment size\n");
-	}
+	if (pdev->dev.dma_parms)
+		dma_set_max_seg_size(imgsys_dev->dev, UINT_MAX);
 
 	if (mtk_imgsys_of_rproc(imgsys_dev, pdev)) {
 		ret = -EFAULT;
@@ -1764,7 +1753,7 @@ err_free_dev_alloc:
 	return ret;
 }
 
-static int mtk_imgsys_remove(struct platform_device *pdev)
+static void mtk_imgsys_remove(struct platform_device *pdev)
 {
 	struct mtk_imgsys_dev *imgsys_dev = dev_get_drvdata(&pdev->dev);
 
@@ -1777,7 +1766,6 @@ static int mtk_imgsys_remove(struct platform_device *pdev)
 	imgsys_cmdq_release(imgsys_dev);
 	devm_kfree(&pdev->dev, imgsys_dev->larbs);
 	devm_kfree(&pdev->dev, imgsys_dev);
-	return 0;
 }
 
 static int __maybe_unused mtk_imgsys_runtime_suspend(struct device *dev)

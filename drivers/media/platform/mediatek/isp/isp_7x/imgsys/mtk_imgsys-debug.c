@@ -302,11 +302,7 @@ void imgsys_main_set_init(struct mtk_imgsys_dev *imgsys_dev)
 	unsigned int hw_idx = 0;
 	u32 count;
 	u32 value;
-	int i, num;
 
-	num = imgsys_dev->larbs_num;
-	for (i = 0; i < num; i++)
-		mtk_smi_larb_clamp(imgsys_dev->larbs[i], 1);
 
 	iowrite32(0xFFFFFFFF, dip_reg_base + SW_RST);
 	iowrite32(0xFFFFFFFF, dip1_reg_base + SW_RST);
@@ -378,10 +374,6 @@ void imgsys_main_set_init(struct mtk_imgsys_dev *imgsys_dev)
 
 	iowrite32(0x00CF00FF, imgsys_main_reg_base + SW_RST);
 	iowrite32(0x0, imgsys_main_reg_base + SW_RST);
-
-	for (i = 0; i < num; i++)
-		mtk_smi_larb_clamp(imgsys_dev->larbs[i], 0);
-
 }
 
 void imgsys_main_uninit(struct mtk_imgsys_dev *imgsys_dev)
@@ -553,7 +545,7 @@ void imgsys_ndd_dump_routine(struct mtk_imgsys_dev *imgsys_dev,
 }
 EXPORT_SYMBOL_GPL(imgsys_ndd_dump_routine);
 
-void imgsys_cg_debug_dump(struct mtk_imgsys_dev *imgsys_dev)
+static void imgsys_cg_debug_dump(struct mtk_imgsys_dev *imgsys_dev)
 {
 	unsigned int i = 0;
 

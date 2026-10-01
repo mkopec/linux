@@ -12,6 +12,10 @@
 #include <linux/regulator/consumer.h>
 #include <linux/types.h>
 #include <linux/videodev2.h>
+
+#ifndef V4L2_META_FMT_MTFD_RESULT
+#define V4L2_META_FMT_MTFD_RESULT v4l2_fourcc('M', 'T', 'f', 'd')
+#endif
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/videobuf2-v4l2.h>

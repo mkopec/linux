@@ -21,3 +21,5 @@ modules/mtk_imgsys-me.o
 
 obj-$(CONFIG_VIDEO_MTK_ISP_71_IMGSYS) += mtk_imgsys_util.o
 obj-$(CONFIG_VIDEO_MTK_ISP_71_IMGSYS) += mtk_imgsys_hw_isp.o
+
+ccflags-y += -I$(src)/include/uapi
