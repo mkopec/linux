@@ -483,6 +483,7 @@ static int mtk_cam_raw_set_res_ctrl(struct v4l2_ctrl *ctrl)
 
 	ret = mtk_cam_raw_res_store(pipeline, res_user);
 	pipeline->user_res = *res_user;
+	pipeline->user_res_set = true;
 	if (media_entity_is_streaming(&pipeline->subdev.entity)) {
 		/* If the pipeline is streaming, pending the change */
 		dev_dbg(dev, "%s:pipe(%d): pending res calc has not been supported except bin\n",
@@ -508,6 +509,64 @@ static int mtk_cam_raw_set_res_ctrl(struct v4l2_ctrl *ctrl)
 		return -EINVAL;
 
 	return ret;
+}
+
+/*
+ * Calculate the resources from the sensor when userspace has not configured
+ * them through V4L2_CID_MTK_CAM_RAW_RESOURCE_CALC.
+ */
+int mtk_cam_raw_default_res(struct mtk_raw_pipeline *pipeline,
+			    struct v4l2_subdev *sensor)
+{
+	struct v4l2_mbus_framefmt sink_fmt = pipeline->cfg[MTK_RAW_SINK].mbus_fmt;
+	struct device *dev = pipeline->raw->devs[pipeline->id];
+	struct mtk_cam_resource res = {
+		.raw_res = {
+			.strategy = 0xffff,
+			.raw_max = 0xff,
+			.raw_min = 0xff,
+			.path_sel = 0xff,
+		},
+	};
+	struct v4l2_ctrl *pixel_rate, *hblank, *vblank;
+	u64 frame_size;
+	int ret;
+
+	if (pipeline->user_res_set)
+		return 0;
+
+	pixel_rate = v4l2_ctrl_find(sensor->ctrl_handler, V4L2_CID_PIXEL_RATE);
+	hblank = v4l2_ctrl_find(sensor->ctrl_handler, V4L2_CID_HBLANK);
+	vblank = v4l2_ctrl_find(sensor->ctrl_handler, V4L2_CID_VBLANK);
+	if (!pixel_rate || !hblank || !vblank) {
+		dev_err(dev, "%s: sensor lacks pixel rate or blanking controls\n",
+			sensor->name);
+		return -EINVAL;
+	}
+
+	res.sensor_res.pixel_rate = v4l2_ctrl_g_ctrl_int64(pixel_rate);
+	res.sensor_res.cust_pixel_rate = res.sensor_res.pixel_rate;
+	res.sensor_res.hblank = v4l2_ctrl_g_ctrl(hblank);
+	res.sensor_res.vblank = v4l2_ctrl_g_ctrl(vblank);
+
+	frame_size = (u64)(sink_fmt.width + res.sensor_res.hblank) *
+		     (sink_fmt.height + res.sensor_res.vblank);
+	if (!frame_size || frame_size > U32_MAX ||
+	    res.sensor_res.pixel_rate > U32_MAX)
+		return -EINVAL;
+
+	res.sensor_res.interval.numerator = frame_size;
+	res.sensor_res.interval.denominator = res.sensor_res.pixel_rate;
+
+	ret = mtk_cam_raw_res_store(pipeline, &res);
+	if (ret)
+		return ret;
+
+	pipeline->user_res = res;
+	pipeline->res_config.sink_fmt = sink_fmt;
+
+	return mtk_cam_raw_try_res_ctrl(pipeline, &res, &pipeline->res_config,
+					&sink_fmt);
 }
 
 static int mtk_raw_set_res_ctrl(struct device *dev, struct v4l2_ctrl *ctrl,

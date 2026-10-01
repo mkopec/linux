@@ -3502,6 +3502,12 @@ int mtk_cam_ctx_stream_on(struct mtk_cam_ctx *ctx, struct mtk_cam_video_device *
 		return 0;
 	}
 
+	if (ctx->used_raw_num && ctx->sensor) {
+		ret = mtk_cam_raw_default_res(ctx->pipe, ctx->sensor);
+		if (ret)
+			return ret;
+	}
+
 	for (i = 0; i < MAX_PIPES_PER_STREAM && ctx->pipe_subdevs[i]; i++) {
 		ret = v4l2_subdev_call(ctx->pipe_subdevs[i], video,
 				       s_stream, 1);
