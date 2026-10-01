@@ -1734,15 +1734,51 @@ static struct media_request *mtk_cam_req_alloc(struct media_device *mdev)
 	struct mtk_cam_request *cam_req;
 
 	cam_req = vzalloc(sizeof(*cam_req));
+	if (!cam_req)
+		return NULL;
+
 	spin_lock_init(&cam_req->done_status_lock);
 	mutex_init(&cam_req->fs.op_lock);
+	INIT_LIST_HEAD(&cam_req->list);
 
 	return &cam_req->req;
+}
+
+static bool mtk_cam_req_unlink(struct mtk_cam_request *cam_req,
+			       struct list_head *job_list, spinlock_t *lock)
+{
+	struct mtk_cam_request *req;
+	bool found = false;
+
+	spin_lock(lock);
+	list_for_each_entry(req, job_list, list) {
+		if (req == cam_req) {
+			list_del_init(&req->list);
+			found = true;
+			break;
+		}
+	}
+	spin_unlock(lock);
+
+	return found;
 }
 
 static void mtk_cam_req_free(struct media_request *req)
 {
 	struct mtk_cam_request *cam_req = to_mtk_cam_req(req);
+	struct mtk_cam_device *cam =
+		container_of(req->mdev, struct mtk_cam_device, media_dev);
+
+	/*
+	 * A request queued while the pipeline is stopping can complete and be
+	 * freed without passing through the cleanup of the job lists.
+	 */
+	if (mtk_cam_req_unlink(cam_req, &cam->pending_job_list,
+			       &cam->pending_job_lock) ||
+	    mtk_cam_req_unlink(cam_req, &cam->running_job_list,
+			       &cam->running_job_lock))
+		dev_dbg(cam->dev, "%s: freed while on a job list\n",
+			req->debug_str);
 
 	vfree(cam_req);
 }
