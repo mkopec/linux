@@ -1104,7 +1104,7 @@ static int mtk_imgsys_video_device_v4l2_register(struct mtk_imgsys_pipe *pipe,
 
 	strscpy(vbq->name, node->desc->name, sizeof(vbq->name));
 
-	snprintf(vdev->name, sizeof(vdev->name), "%s %s", pipe->desc->name,
+	snprintf(vdev->name, 32, "%s %s", pipe->desc->name,
 		 node->desc->name);
 	vdev->entity.name = vdev->name;
 	vdev->entity.function = MEDIA_ENT_F_IO_V4L;
