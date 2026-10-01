@@ -97,7 +97,7 @@ void mtk_imgsys_hw_working_buf_pool_release(struct mtk_imgsys_dev *imgsys_dev)
 	dma_unmap_resource(imgsys_dev->dev, buf->isp_daddr,
 			   sizeof(struct singlenode_desc_norm) * IMGSYS_WORKING_BUF_NUM,
 			   DMA_TO_DEVICE, 0);
-	dma_free_coherent(imgsys_dev->dev,
+	dma_free_coherent(imgsys_dev->smem_dev,
 			  sizeof(struct singlenode_desc_norm) * IMGSYS_WORKING_BUF_NUM,
 			  buf->sd_norm, buf->scp_daddr);
 	kfree(imgsys_dev->working_bufs);

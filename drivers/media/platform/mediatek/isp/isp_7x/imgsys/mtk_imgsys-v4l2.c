@@ -1071,15 +1071,15 @@ static int mtk_imgsys_video_device_v4l2_register(struct mtk_imgsys_pipe *pipe,
 	node->vdev_fmt.type = node->desc->buf_type;
 	mtk_imgsys_pipe_load_default_fmt(pipe, node, &node->vdev_fmt);
 
+	node->vdev_pad.flags = V4L2_TYPE_IS_OUTPUT(node->desc->buf_type) ?
+		MEDIA_PAD_FL_SOURCE : MEDIA_PAD_FL_SINK;
+
 	ret = media_entity_pads_init(&vdev->entity, 1, &node->vdev_pad);
 	if (ret) {
 		dev_info(pipe->imgsys_dev->dev,
 			 "failed initialize media entity (%d)\n", ret);
 		goto err_mutex_destroy;
 	}
-
-	node->vdev_pad.flags = V4L2_TYPE_IS_OUTPUT(node->desc->buf_type) ?
-		MEDIA_PAD_FL_SOURCE : MEDIA_PAD_FL_SINK;
 
 	vbq->type = node->vdev_fmt.type;
 	vbq->io_modes = VB2_MMAP | VB2_DMABUF;
@@ -1310,6 +1310,11 @@ int mtk_imgsys_pipe_v4l2_register(struct mtk_imgsys_pipe *pipe,
 		ret = -ENOMEM;
 		goto err_release_ctrl;
 	}
+	for (i = 0; i < pipe->desc->total_queues; i++)
+		pipe->subdev_pads[pipe->nodes[i].desc->id].flags =
+			V4L2_TYPE_IS_OUTPUT(pipe->nodes[i].desc->buf_type) ?
+			MEDIA_PAD_FL_SINK : MEDIA_PAD_FL_SOURCE;
+
 	ret = media_entity_pads_init(&pipe->subdev.entity,
 				     pipe->desc->total_queues,
 				     pipe->subdev_pads);
@@ -1328,11 +1333,6 @@ int mtk_imgsys_pipe_v4l2_register(struct mtk_imgsys_pipe *pipe,
 	pipe->subdev.flags =
 		V4L2_SUBDEV_FL_HAS_DEVNODE | V4L2_SUBDEV_FL_HAS_EVENTS;
 	pipe->subdev.ctrl_handler = NULL;
-
-	for (i = 0; i < pipe->desc->total_queues; i++)
-		pipe->subdev_pads[pipe->nodes[i].desc->id].flags =
-			V4L2_TYPE_IS_OUTPUT(pipe->nodes[i].desc->buf_type) ?
-			MEDIA_PAD_FL_SINK : MEDIA_PAD_FL_SOURCE;
 
 	snprintf(pipe->subdev.name, sizeof(pipe->subdev.name),
 		 "%s", pipe->desc->name);
