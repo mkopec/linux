@@ -5,6 +5,7 @@
  * Author: Daniel Huang <daniel.huang@mediatek.com>
  *
  */
+#include <linux/vmalloc.h>
 #include <linux/dma-mapping.h>
 #include <linux/mailbox_controller.h>
 #include <linux/math64.h>
@@ -24,43 +25,17 @@ static u32 is_stream_off;
 static struct imgsys_event_history event_hist[IMGSYS_CMDQ_SYNC_POOL_NUM];
 static void imgsys_cmdq_task_cb(struct mbox_client *cl, void *mssg);
 
-static void imgsys_destroy_pkt(struct cmdq_pkt *pkt)
+static void imgsys_destroy_pkt(struct cmdq_client *client, struct cmdq_pkt *pkt)
 {
-	struct cmdq_client *client = (struct cmdq_client *)pkt->cl;
-
-	dma_unmap_single(client->chan->mbox->dev, pkt->pa_base, pkt->buf_size,
-			 DMA_TO_DEVICE);
-	kfree(pkt->va_base);
+	cmdq_pkt_destroy(client, pkt);
 }
 
 static int imgsys_create_pkt(struct cmdq_pkt *pkt, struct cmdq_client *client, u32 size)
 {
-	struct device *dev;
-	dma_addr_t dma_addr;
-
-	pkt->va_base = kzalloc(size, GFP_KERNEL);
-
-	if (!pkt->va_base)
-		return -ENOMEM;
-
-	pkt->buf_size = size;
-	pkt->cl = (void *)client;
-
-	if (!pkt->cl || !client->chan || !client->chan->mbox)
+	if (!client || !client->chan || !client->chan->mbox)
 		return -EINVAL;
 
-	dev = client->chan->mbox->dev;
-	dma_addr = dma_map_single(dev, pkt->va_base, pkt->buf_size,
-				  DMA_TO_DEVICE);
-	if (dma_mapping_error(dev, dma_addr)) {
-		dev_err(dev, "dma map failed, size=%u\n", (u32)(u64)size);
-		kfree(pkt->va_base);
-		return -ENOMEM;
-	}
-
-	pkt->pa_base = dma_addr;
-
-	return 0;
+	return cmdq_pkt_create(client, pkt, size);
 }
 
 static struct cmdq_client *imgsys_clt[IMGSYS_ENG_MAX];
@@ -269,7 +244,7 @@ static void imgsys_cmdq_cb_work(struct work_struct *work)
 		cb_param->user_cmdq_cb(user_cb_data, cb_param->frm_idx, last_task_in_req);
 	}
 
-	imgsys_destroy_pkt(&cb_param->pkt);
+	imgsys_destroy_pkt(cb_param->clt, &cb_param->pkt);
 	vfree(cb_param);
 }
 
@@ -612,7 +587,7 @@ int imgsys_cmdq_sendtask(struct mtk_imgsys_dev *imgsys_dev,
 				pr_info("%s: [ERROR] parsing idx(%d) with cmd(%d) in block(%d) for frm(%d/%d) fail\n",
 					__func__, cmd_idx, cmd[cmd_idx].opcode,
 					blk_idx, frm_idx, frm_num);
-				imgsys_destroy_pkt(&cb_param->pkt);
+				imgsys_destroy_pkt(clt, &cb_param->pkt);
 				vfree(cb_param);
 				goto sendtask_done;
 			}
@@ -675,7 +650,9 @@ int imgsys_cmdq_sendtask(struct mtk_imgsys_dev *imgsys_dev,
 					cb_param->pkt_ofst[4]);
 
 				/* flush synchronized, block API */
-				cmdq_pkt_finalize(&cb_param->pkt);
+				cmdq_pkt_eoc(&cb_param->pkt);
+				cmdq_pkt_jump_rel_temp(&cb_param->pkt, CMDQ_INST_SIZE,
+						       cmdq_get_shift_pa(clt->chan));
 				dma_sync_single_for_device(clt->chan->mbox->dev,
 							   cb_param->pkt.pa_base,
 							   cb_param->pkt.cmd_buf_size,

@@ -409,7 +409,7 @@ static void mtk_aie_hw_job_finish(struct mtk_aie_dev *fd,
 		src_vbuf = v4l2_m2m_src_buf_remove(ctx->fh.m2m_ctx);
 		dst_vbuf = v4l2_m2m_dst_buf_remove(ctx->fh.m2m_ctx);
 		if (src_vbuf && dst_vbuf)
-			v4l2_m2m_buf_copy_metadata(src_vbuf, dst_vbuf, true);
+			v4l2_m2m_buf_copy_metadata(src_vbuf, dst_vbuf);
 		if (src_vbuf)
 			v4l2_m2m_buf_done(src_vbuf, vb_state);
 		if (dst_vbuf)
@@ -926,8 +926,6 @@ static const struct vb2_ops mtk_aie_vb2_ops = {
 	.buf_queue = mtk_aie_vb2_buf_queue,
 	.start_streaming = mtk_aie_vb2_start_streaming,
 	.stop_streaming = mtk_aie_vb2_stop_streaming,
-	.wait_prepare = vb2_ops_wait_prepare,
-	.wait_finish = vb2_ops_wait_finish,
 	.buf_request_complete = mtk_aie_vb2_request_complete,
 };
 
@@ -1094,7 +1092,7 @@ static int mtk_vfd_open(struct file *filp)
 		ret = PTR_ERR(ctx->fh.m2m_ctx);
 		goto err_free_ctrl_handler;
 	}
-	v4l2_fh_add(&ctx->fh);
+	v4l2_fh_add(&ctx->fh, filp);
 	fd->fd_state |= STATE_OPEN;
 
 	mutex_unlock(&fd->dev_lock);
@@ -1123,7 +1121,7 @@ static int mtk_vfd_release(struct file *filp)
 
 	v4l2_m2m_ctx_release(ctx->fh.m2m_ctx);
 	v4l2_ctrl_handler_free(&ctx->hdl);
-	v4l2_fh_del(&ctx->fh);
+	v4l2_fh_del(&ctx->fh, filp);
 	v4l2_fh_exit(&ctx->fh);
 
 	kfree(ctx);
@@ -1752,7 +1750,7 @@ err_free:
 	return ret;
 }
 
-static int mtk_aie_remove(struct platform_device *pdev)
+static void mtk_aie_remove(struct platform_device *pdev)
 {
 	struct mtk_aie_dev *fd = dev_get_drvdata(&pdev->dev);
 
@@ -1764,8 +1762,6 @@ static int mtk_aie_remove(struct platform_device *pdev)
 #ifdef CONFIG_DEBUG_FS
 	kfree(fd->tr_info.dump_buffer);
 #endif
-
-	return 0;
 }
 
 static int mtk_aie_suspend(struct device *dev)
