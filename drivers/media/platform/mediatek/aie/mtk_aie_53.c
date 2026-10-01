@@ -1165,7 +1165,7 @@ static void mtk_aie_fill_user_param(struct mtk_aie_dev *fd,
 
 	ctrl = v4l2_ctrl_find(hdl, V4L2_CID_MTK_AIE_PARAM);
 	if (ctrl)
-		memcpy(user_param, ctrl->p_new.p_u32, sizeof(struct user_param));
+		memcpy(user_param, ctrl->p_cur.p_u32, sizeof(struct user_param));
 	else
 		dev_err(fd->dev, "NO V4L2_CID_MTK_AIE_PARAM!\n");
 }
@@ -1196,6 +1196,8 @@ static int mtk_aie_job_ready(void *priv)
 	src_buf = v4l2_m2m_next_src_buf(ctx->fh.m2m_ctx);
 	dst_buf = v4l2_m2m_next_dst_buf(ctx->fh.m2m_ctx);
 
+	if (src_buf->vb2_buf.req_obj.req)
+		v4l2_ctrl_request_setup(src_buf->vb2_buf.req_obj.req, &ctx->hdl);
 	mtk_aie_fill_user_param(fd, &fd_param.user_param, &ctx->hdl);
 
 	plane_vaddr = vb2_plane_vaddr(&dst_buf->vb2_buf, 0);
@@ -1260,7 +1262,8 @@ err_unlock:
 
 ctrl_ret:
 	/* Complete request controls if any */
-	v4l2_ctrl_request_complete(src_buf->vb2_buf.req_obj.req, &ctx->hdl);
+	if (src_buf)
+		v4l2_ctrl_request_complete(src_buf->vb2_buf.req_obj.req, &ctx->hdl);
 
 	return ret;
 }
@@ -1273,7 +1276,16 @@ static void mtk_aie_device_run(void *priv)
 
 	ret = mtk_aie_job_ready(priv);
 	if (ret != 1) {
+		struct vb2_v4l2_buffer *src_buf, *dst_buf;
+
 		dev_err(fd->dev, "Failed to run job ready\n");
+		src_buf = v4l2_m2m_src_buf_remove(ctx->fh.m2m_ctx);
+		dst_buf = v4l2_m2m_dst_buf_remove(ctx->fh.m2m_ctx);
+		if (src_buf)
+			v4l2_m2m_buf_done(src_buf, VB2_BUF_STATE_ERROR);
+		if (dst_buf)
+			v4l2_m2m_buf_done(dst_buf, VB2_BUF_STATE_ERROR);
+		v4l2_m2m_job_finish(fd->m2m_dev, ctx->fh.m2m_ctx);
 		return;
 	}
 
