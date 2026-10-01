@@ -270,6 +270,10 @@
 	domain-supply = <&mt6359_vproc1_buck_reg>;
 };
 
+&img_vcore {
+	domain-supply = <&mt6359_vproc1_buck_reg>;
+};
+
 &cpu0 {
 	cpu-supply = <&mt6359_vcore_buck_reg>;
 };
