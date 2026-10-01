@@ -95,9 +95,6 @@ static int mtk_cam_vb2_queue_setup(struct vb2_queue *vq,
 	if (max_buffer_count)
 		*num_buffers = clamp_val(*num_buffers, 1, max_buffer_count);
 
-	if (node->desc.smem_alloc)
-		vq->dma_attrs |= DMA_ATTR_NO_KERNEL_MAPPING;
-
 	if (vq->type == V4L2_BUF_TYPE_META_OUTPUT ||
 	    vq->type == V4L2_BUF_TYPE_META_CAPTURE)
 		size = fmt->fmt.meta.buffersize;
@@ -195,6 +192,14 @@ static int mtk_cam_vb2_buf_prepare(struct vb2_buffer *vb)
 				vb2_get_plane_payload(vb, 0), size);
 		}
 		return 0;
+	}
+
+	/* The driver fills in the statistics buffer layout. */
+	if (vb->vb2_queue->type == V4L2_BUF_TYPE_META_CAPTURE &&
+	    !vb2_plane_vaddr(vb, 0)) {
+		dev_dbg(vb->vb2_queue->dev, "%s: no kernel mapping\n",
+			node->desc.name);
+		return -EINVAL;
 	}
 
 	v4l2_buf->field = V4L2_FIELD_NONE;
