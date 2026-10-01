@@ -857,7 +857,7 @@ static int mtk_aie_try_fmt_out_mp(struct file *file, void *fh,
 static int mtk_aie_g_fmt_out_mp(struct file *file, void *fh,
 				struct v4l2_format *f)
 {
-	struct mtk_aie_ctx *ctx = fh_to_ctx(fh);
+	struct mtk_aie_ctx *ctx = fh_to_ctx(file_to_v4l2_fh(file));
 
 	f->fmt.pix_mp = ctx->src_fmt;
 
@@ -867,7 +867,7 @@ static int mtk_aie_g_fmt_out_mp(struct file *file, void *fh,
 static int mtk_aie_s_fmt_out_mp(struct file *file, void *fh,
 				struct v4l2_format *f)
 {
-	struct mtk_aie_ctx *ctx = fh_to_ctx(fh);
+	struct mtk_aie_ctx *ctx = fh_to_ctx(file_to_v4l2_fh(file));
 	struct vb2_queue *vq = v4l2_m2m_get_vq(ctx->fh.m2m_ctx, f->type);
 	struct mtk_aie_dev *fd = NULL;
 	const struct v4l2_pix_format_mplane *fmt = NULL;
