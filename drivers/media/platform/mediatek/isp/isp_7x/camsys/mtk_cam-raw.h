@@ -206,6 +206,7 @@ struct mtk_raw_pipeline {
 	s64 feature_active;
 
 	struct mtk_cam_resource user_res;
+	bool user_res_set;
 	struct mtk_cam_resource_config res_config;
 	struct mtk_cam_resource_config try_res_config;
 	int sensor_mode_update;
@@ -287,6 +288,9 @@ int mtk_cam_raw_setup_dependencies(struct mtk_raw *raw);
 int mtk_cam_raw_register_entities(struct mtk_raw *raw,
 				  struct v4l2_device *v4l2_dev);
 void mtk_cam_raw_unregister_entities(struct mtk_raw *raw);
+
+int mtk_cam_raw_default_res(struct mtk_raw_pipeline *pipeline,
+			    struct v4l2_subdev *sensor);
 
 int mtk_cam_raw_select(struct mtk_cam_ctx *ctx,
 		       struct mtkcam_ipi_input_param *cfg_in_param);
