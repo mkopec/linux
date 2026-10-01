@@ -207,7 +207,7 @@
 			no-map;
 		};
 
-		scp_isp_cma: memory@7a000000 {
+		scp_isp_cma: scp-isp-cma-region {
 			compatible = "shared-dma-pool";
 			reg = <0 0x7a000000 0 0x5000000>;
 			reusable;
