@@ -196,6 +196,26 @@
 	status = "okay";
 };
 
+&imgsys_l10 {
+	status = "okay";
+};
+
+&imgsys_l11a {
+	status = "okay";
+};
+
+&imgsys_l11b {
+	status = "okay";
+};
+
+&imgsys_l11c {
+	status = "okay";
+};
+
+&imgsys_l15 {
+	status = "okay";
+};
+
 &cam_raw_a {
 	status = "okay";
 };

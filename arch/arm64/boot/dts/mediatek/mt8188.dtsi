@@ -3544,6 +3544,175 @@
 			status = "disabled";
 		};
 
+		imgsys_l10: imgsys-l10 {
+			compatible = "mediatek,imgsys-larb";
+			#address-cells = <2>;
+			#size-cells = <2>;
+			dma-ranges = <0x2 0x0 0x0 0x40000000 0x1 0x0>;
+			status = "disabled";
+			iommus = <&vdo_iommu M4U_PORT_L10_IMGI_D1>,
+				 <&vdo_iommu M4U_PORT_L10_IMGBI_D1>,
+				 <&vdo_iommu M4U_PORT_L10_IMGCI_D1>,
+				 <&vdo_iommu M4U_PORT_L10_IMGDI_D1>,
+				 <&vdo_iommu M4U_PORT_L10_DEPI_D1>,
+				 <&vdo_iommu M4U_PORT_L10_DMGI_D1>,
+				 <&vdo_iommu M4U_PORT_L10_SMTI_D1>,
+				 <&vdo_iommu M4U_PORT_L10_RECI_D1>,
+				 <&vdo_iommu M4U_PORT_L10_RECI_D1_N>,
+				 <&vdo_iommu M4U_PORT_L10_TNRWI_D1>,
+				 <&vdo_iommu M4U_PORT_L10_TNRCI_D1>,
+				 <&vdo_iommu M4U_PORT_L10_TNRCI_D1_N>,
+				 <&vdo_iommu M4U_PORT_L10_IMG4O_D1>,
+				 <&vdo_iommu M4U_PORT_L10_IMG4BO_D1>,
+				 <&vdo_iommu M4U_PORT_L10_SMTI_D8>,
+				 <&vdo_iommu M4U_PORT_L10_SMTO_D1>,
+				 <&vdo_iommu M4U_PORT_L10_TNRMO_D1>,
+				 <&vdo_iommu M4U_PORT_L10_TNRMO_D1_N>,
+				 <&vdo_iommu M4U_PORT_L10_SMTO_D8>,
+				 <&vdo_iommu M4U_PORT_L10_DBGO_D1>;
+		};
+
+		imgsys_l11a: imgsys-l11a {
+			compatible = "mediatek,imgsys-larb";
+			#address-cells = <2>;
+			#size-cells = <2>;
+			dma-ranges = <0x2 0x0 0x0 0x40000000 0x1 0x0>;
+			status = "disabled";
+			iommus = <&vdo_iommu M4U_PORT_L11A_WPE_RDMA_0>,
+				 <&vdo_iommu M4U_PORT_L11A_WPE_RDMA_1>,
+				 <&vdo_iommu M4U_PORT_L11A_WPE_RDMA_4P_0>,
+				 <&vdo_iommu M4U_PORT_L11A_WPE_RDMA_4P_1>,
+				 <&vdo_iommu M4U_PORT_L11A_WPE_CQ0>,
+				 <&vdo_iommu M4U_PORT_L11A_WPE_CQ1>,
+				 <&vdo_iommu M4U_PORT_L11A_PIMGI_P1>,
+				 <&vdo_iommu M4U_PORT_L11A_PIMGBI_P1>,
+				 <&vdo_iommu M4U_PORT_L11A_PIMGCI_P1>,
+				 <&vdo_iommu M4U_PORT_L11A_IMGI_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11A_IMGBI_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11A_IMGCI_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11A_SMTI_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11A_SMTI_T4_C>,
+				 <&vdo_iommu M4U_PORT_L11A_SMTI_T6_C>,
+				 <&vdo_iommu M4U_PORT_L11A_YUVO_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11A_YUVBO_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11A_YUVCO_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11A_WPE_WDMA_0>,
+				 <&vdo_iommu M4U_PORT_L11A_WPE_WDMA_4P_0>,
+				 <&vdo_iommu M4U_PORT_L11A_WROT_P1>,
+				 <&vdo_iommu M4U_PORT_L11A_TCCSO_P1>,
+				 <&vdo_iommu M4U_PORT_L11A_TCCSI_P1>,
+				 <&vdo_iommu M4U_PORT_L11A_TIMGO_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11A_YUVO_T2_C>,
+				 <&vdo_iommu M4U_PORT_L11A_YUVO_T5_C>,
+				 <&vdo_iommu M4U_PORT_L11A_SMTO_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11A_SMTO_T4_C>,
+				 <&vdo_iommu M4U_PORT_L11A_SMTO_T6_C>,
+				 <&vdo_iommu M4U_PORT_L11A_DBGO_T1_C>;
+		};
+
+		imgsys_l11b: imgsys-l11b {
+			compatible = "mediatek,imgsys-larb";
+			#address-cells = <2>;
+			#size-cells = <2>;
+			dma-ranges = <0x2 0x0 0x0 0x40000000 0x1 0x0>;
+			status = "disabled";
+			iommus = <&vpp_iommu M4U_PORT_L11B_WPE_RDMA_0>,
+				 <&vpp_iommu M4U_PORT_L11B_WPE_RDMA_1>,
+				 <&vpp_iommu M4U_PORT_L11B_WPE_RDMA_4P_0>,
+				 <&vpp_iommu M4U_PORT_L11B_WPE_RDMA_4P_1>,
+				 <&vpp_iommu M4U_PORT_L11B_WPE_CQ0>,
+				 <&vpp_iommu M4U_PORT_L11B_WPE_CQ1>,
+				 <&vpp_iommu M4U_PORT_L11B_PIMGI_P1>,
+				 <&vpp_iommu M4U_PORT_L11B_PIMGBI_P1>,
+				 <&vpp_iommu M4U_PORT_L11B_PIMGCI_P1>,
+				 <&vpp_iommu M4U_PORT_L11B_IMGI_T1_C>,
+				 <&vpp_iommu M4U_PORT_L11B_IMGBI_T1_C>,
+				 <&vpp_iommu M4U_PORT_L11B_IMGCI_T1_C>,
+				 <&vpp_iommu M4U_PORT_L11B_SMTI_T1_C>,
+				 <&vpp_iommu M4U_PORT_L11B_SMTI_T4_C>,
+				 <&vpp_iommu M4U_PORT_L11B_SMTI_T6_C>,
+				 <&vpp_iommu M4U_PORT_L11B_YUVO_T1_C>,
+				 <&vpp_iommu M4U_PORT_L11B_YUVBO_T1_C>,
+				 <&vpp_iommu M4U_PORT_L11B_YUVCO_T1_C>,
+				 <&vpp_iommu M4U_PORT_L11B_WPE_WDMA_0>,
+				 <&vpp_iommu M4U_PORT_L11B_WPE_WDMA_4P_0>,
+				 <&vpp_iommu M4U_PORT_L11B_WROT_P1>,
+				 <&vpp_iommu M4U_PORT_L11B_TCCSO_P1>,
+				 <&vpp_iommu M4U_PORT_L11B_TCCSI_P1>,
+				 <&vpp_iommu M4U_PORT_L11B_TIMGO_T1_C>,
+				 <&vpp_iommu M4U_PORT_L11B_YUVO_T2_C>,
+				 <&vpp_iommu M4U_PORT_L11B_YUVO_T5_C>,
+				 <&vpp_iommu M4U_PORT_L11B_SMTO_T1_C>,
+				 <&vpp_iommu M4U_PORT_L11B_SMTO_T4_C>,
+				 <&vpp_iommu M4U_PORT_L11B_SMTO_T6_C>,
+				 <&vpp_iommu M4U_PORT_L11B_DBGO_T1_C>;
+		};
+
+		imgsys_l11c: imgsys-l11c {
+			compatible = "mediatek,imgsys-larb";
+			#address-cells = <2>;
+			#size-cells = <2>;
+			dma-ranges = <0x2 0x0 0x0 0x40000000 0x1 0x0>;
+			status = "disabled";
+			iommus = <&vdo_iommu M4U_PORT_L11C_WPE_RDMA_0>,
+				 <&vdo_iommu M4U_PORT_L11C_WPE_RDMA_1>,
+				 <&vdo_iommu M4U_PORT_L11C_WPE_RDMA_4P_0>,
+				 <&vdo_iommu M4U_PORT_L11C_WPE_RDMA_4P_1>,
+				 <&vdo_iommu M4U_PORT_L11C_WPE_CQ0>,
+				 <&vdo_iommu M4U_PORT_L11C_WPE_CQ1>,
+				 <&vdo_iommu M4U_PORT_L11C_PIMGI_P1>,
+				 <&vdo_iommu M4U_PORT_L11C_PIMGBI_P1>,
+				 <&vdo_iommu M4U_PORT_L11C_PIMGCI_P1>,
+				 <&vdo_iommu M4U_PORT_L11C_IMGI_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11C_IMGBI_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11C_IMGCI_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11C_SMTI_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11C_SMTI_T4_C>,
+				 <&vdo_iommu M4U_PORT_L11C_SMTI_T6_C>,
+				 <&vdo_iommu M4U_PORT_L11C_YUVO_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11C_YUVBO_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11C_YUVCO_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11C_WPE_WDMA_0>,
+				 <&vdo_iommu M4U_PORT_L11C_WPE_WDMA_4P_0>,
+				 <&vdo_iommu M4U_PORT_L11C_WROT_P1>,
+				 <&vdo_iommu M4U_PORT_L11C_TCCSO_P1>,
+				 <&vdo_iommu M4U_PORT_L11C_TCCSI_P1>,
+				 <&vdo_iommu M4U_PORT_L11C_TIMGO_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11C_YUVO_T2_C>,
+				 <&vdo_iommu M4U_PORT_L11C_YUVO_T5_C>,
+				 <&vdo_iommu M4U_PORT_L11C_SMTO_T1_C>,
+				 <&vdo_iommu M4U_PORT_L11C_SMTO_T4_C>,
+				 <&vdo_iommu M4U_PORT_L11C_SMTO_T6_C>,
+				 <&vdo_iommu M4U_PORT_L11C_DBGO_T1_C>;
+		};
+
+		imgsys_l15: imgsys-l15 {
+			compatible = "mediatek,imgsys-larb";
+			#address-cells = <2>;
+			#size-cells = <2>;
+			dma-ranges = <0x2 0x0 0x0 0x40000000 0x1 0x0>;
+			status = "disabled";
+			iommus = <&vpp_iommu M4U_PORT_L15_VIPI_D1>,
+				 <&vpp_iommu M4U_PORT_L15_VIPBI_D1>,
+				 <&vpp_iommu M4U_PORT_L15_SMTI_D6>,
+				 <&vpp_iommu M4U_PORT_L15_TNCSTI_D1>,
+				 <&vpp_iommu M4U_PORT_L15_TNCSTI_D4>,
+				 <&vpp_iommu M4U_PORT_L15_SMTI_D4>,
+				 <&vpp_iommu M4U_PORT_L15_IMG3O_D1>,
+				 <&vpp_iommu M4U_PORT_L15_IMG3BO_D1>,
+				 <&vpp_iommu M4U_PORT_L15_IMG3CO_D1>,
+				 <&vpp_iommu M4U_PORT_L15_IMG2O_D1>,
+				 <&vpp_iommu M4U_PORT_L15_SMTI_D9>,
+				 <&vpp_iommu M4U_PORT_L15_SMTO_D4>,
+				 <&vpp_iommu M4U_PORT_L15_FEO_D1>,
+				 <&vpp_iommu M4U_PORT_L15_TNCSO_D1>,
+				 <&vpp_iommu M4U_PORT_L15_TNCSTO_D1>,
+				 <&vpp_iommu M4U_PORT_L15_SMTO_D6>,
+				 <&vpp_iommu M4U_PORT_L15_SMTO_D9>,
+				 <&vpp_iommu M4U_PORT_L15_TNCO_D1>,
+				 <&vpp_iommu M4U_PORT_L15_TNCO_D1_N>;
+		};
+
 		aie: aie@15310000 {
 			compatible = "mediatek,mt8188-aie", "mediatek,aie-hw3.1";
 			reg = <0 0x15310000 0 0x1000>;
