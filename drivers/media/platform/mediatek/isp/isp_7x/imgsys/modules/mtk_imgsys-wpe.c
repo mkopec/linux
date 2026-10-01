@@ -354,4 +354,3 @@ void imgsys_wpe_uninit(struct mtk_imgsys_dev *imgsys_dev)
 }
 EXPORT_SYMBOL_GPL(imgsys_wpe_uninit);
 
-MODULE_LICENSE("GPL");
