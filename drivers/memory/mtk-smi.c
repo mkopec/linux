@@ -168,6 +168,7 @@ struct mtk_smi_larb { /* larb: local arbiter */
 	unsigned char			*bank;
 	struct device			*dev;
 	struct regmap			*sub_comm[LARB_MAX_SUB_COMMON];
+	struct clk			*sub_comm_clk[LARB_MAX_SUB_COMMON];
 	u32				sub_comm_inport;
 	struct regmap			*reset;
 	u32				reset_offset;
@@ -663,6 +664,10 @@ static void mtk_smi_larb_clamp(struct mtk_smi_larb *larb, bool clamp)
 	int i;
 
 	for (i = 0; i < LARB_MAX_SUB_COMMON && larb->sub_comm[i]; i++) {
+		if (clk_prepare_enable(larb->sub_comm_clk[i])) {
+			dev_warn(larb->dev, "failed to enable sub-common clock\n");
+			continue;
+		}
 		regmap_write(larb->sub_comm[i],
 			     clamp ? SMI_COMMON_CLAMP_EN_SET : SMI_COMMON_CLAMP_EN_CLR,
 			     BIT(larb->sub_comm_inport));
@@ -670,6 +675,7 @@ static void mtk_smi_larb_clamp(struct mtk_smi_larb *larb, bool clamp)
 		if (!!(val & BIT(larb->sub_comm_inport)) != clamp)
 			dev_dbg(larb->dev, "clamp inport %u failed: 0x%x\n",
 				 larb->sub_comm_inport, val);
+		clk_disable_unprepare(larb->sub_comm_clk[i]);
 	}
 }
 
@@ -708,10 +714,21 @@ static int mtk_smi_larb_sub_common_init(struct mtk_smi_larb *larb)
 		np = of_parse_phandle(dev->of_node, "mediatek,smi-sub-comm", i);
 		if (!np)
 			break;
-		larb->sub_comm[i] = syscon_node_to_regmap(np);
+		/*
+		 * Map the sub-common without its clock: syscon would keep it
+		 * prepared, which keeps the parent PLLs running in system
+		 * suspend. Enable it only around the clamp accesses.
+		 */
+		larb->sub_comm[i] = device_node_to_regmap(np);
+		larb->sub_comm_clk[i] = of_clk_get(np, 0);
 		of_node_put(np);
 		if (IS_ERR(larb->sub_comm[i]))
 			return PTR_ERR(larb->sub_comm[i]);
+		if (IS_ERR(larb->sub_comm_clk[i])) {
+			if (PTR_ERR(larb->sub_comm_clk[i]) == -EPROBE_DEFER)
+				return -EPROBE_DEFER;
+			larb->sub_comm_clk[i] = NULL;
+		}
 	}
 
 	if (!i)
@@ -797,6 +814,8 @@ static void mtk_smi_larb_remove(struct platform_device *pdev)
 
 	if (larb->genpd_nb.notifier_call)
 		dev_pm_genpd_remove_notifier(&pdev->dev);
+	for (int i = 0; i < LARB_MAX_SUB_COMMON; i++)
+		clk_put(larb->sub_comm_clk[i]);
 	device_link_remove(&pdev->dev, larb->smi_common_dev);
 	pm_runtime_disable(&pdev->dev);
 	component_del(&pdev->dev, &mtk_smi_larb_component_ops);
