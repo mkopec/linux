@@ -9,8 +9,11 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
+#include <linux/mfd/syscon.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/regmap.h>
 
 #include <drm/drm_print.h>
 
@@ -112,6 +115,40 @@ void panfrost_gpu_amlogic_quirk(struct panfrost_device *pfdev)
 	 */
 	gpu_write(pfdev, GPU_PWR_KEY, GPU_PWR_KEY_UNLOCK);
 	gpu_write(pfdev, GPU_PWR_OVERRIDE1, 0xfff | (0x20 << 16));
+}
+
+#define MTK_MFG_TIMESTAMP			0x130
+#define   MTK_MFG_TIMESTAMP_TOP_TSVALUEB_EN	0x3
+
+void panfrost_gpu_mt8188_quirk(struct panfrost_device *pfdev)
+{
+	/*
+	 * The GPU timestamp counter only counts once MFGCFG routes the SoC
+	 * system timer to it. The setting is lost whenever the GPU power
+	 * domain is turned off, so it has to be restored on every power-up.
+	 */
+	if (pfdev->mtk_mfgcfg)
+		regmap_write(pfdev->mtk_mfgcfg, MTK_MFG_TIMESTAMP,
+			     MTK_MFG_TIMESTAMP_TOP_TSVALUEB_EN);
+}
+
+static void panfrost_gpu_get_mtk_mfgcfg(struct panfrost_device *pfdev)
+{
+	struct device_node *np;
+	struct regmap *regmap;
+
+	np = of_parse_phandle(pfdev->base.dev->of_node, "mediatek,mfgcfg", 0);
+	if (!np)
+		return;
+
+	regmap = device_node_to_regmap(np);
+	of_node_put(np);
+	if (IS_ERR(regmap)) {
+		dev_warn(pfdev->base.dev, "failed to get MFGCFG: %pe\n", regmap);
+		return;
+	}
+
+	pfdev->mtk_mfgcfg = regmap;
 }
 
 static void panfrost_gpu_init_quirks(struct panfrost_device *pfdev)
@@ -515,6 +552,8 @@ void panfrost_gpu_suspend_irq(struct panfrost_device *pfdev)
 int panfrost_gpu_init(struct panfrost_device *pfdev)
 {
 	int err;
+
+	panfrost_gpu_get_mtk_mfgcfg(pfdev);
 
 	err = panfrost_gpu_soft_reset(pfdev);
 	if (err)
