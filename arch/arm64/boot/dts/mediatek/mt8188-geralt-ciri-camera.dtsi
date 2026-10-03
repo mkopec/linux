@@ -178,6 +178,10 @@
 };
 
 
+&scp_dual_mem {
+	compatible = "shared-dma-pool";
+};
+
 &scp_c1 {
 	firmware-name = "mediatek/mt8188/scp-dual.img";
 	memory-region = <&scp_dual_mem>, <&scp_isp_cma>;
