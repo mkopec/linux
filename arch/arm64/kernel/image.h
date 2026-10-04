@@ -60,8 +60,16 @@
  * regardless of the endianness of the kernel. While constant values could be
  * endian swapped in head.S, all are done here for consistency.
  */
+#ifdef CONFIG_ARM64_DRTM
+#define HEAD_DRTM_SYMBOLS					\
+	DEFINE_IMAGE_LE64(_kernel_drtm_desc_le, __drtm_image_desc - _text);
+#else
+#define HEAD_DRTM_SYMBOLS
+#endif
+
 #define HEAD_SYMBOLS						\
 	DEFINE_IMAGE_LE64(_kernel_size_le, _end - _text);	\
-	DEFINE_IMAGE_LE64(_kernel_flags_le, __HEAD_FLAGS);
+	DEFINE_IMAGE_LE64(_kernel_flags_le, __HEAD_FLAGS);	\
+	HEAD_DRTM_SYMBOLS
 
 #endif /* __ARM64_KERNEL_IMAGE_H */

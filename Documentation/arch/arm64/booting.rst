@@ -82,7 +82,7 @@ The decompressed kernel image contains a 64-byte header as follows::
   u64 text_offset;		/* Image load offset, little endian */
   u64 image_size;		/* Effective Image size, little endian */
   u64 flags;			/* kernel flags, little endian */
-  u64 res2	= 0;		/* reserved */
+  u64 drtm_desc;		/* DRTM descriptor offset, little endian */
   u64 res3	= 0;		/* reserved */
   u64 res4	= 0;		/* reserved */
   u32 magic	= 0x644d5241;	/* Magic number, little endian, "ARM\x64" */
@@ -99,6 +99,16 @@ Header notes:
   res5 is an offset to the PE header and the PE header has the EFI
   entry point (efi_stub_entry).  When the stub has done its work, it
   jumps to code0 to resume the normal boot process.
+
+- drtm_desc was previously reserved and zero. When non-zero, it is the
+  offset from the start of the image to a struct arm64_drtm_image_desc
+  (see arch/arm64/include/asm/image.h), which describes the DEN0113
+  DRTM layout of a kernel built with CONFIG_ARM64_DRTM so that an external
+  loader such as u-root can perform the dynamic launch. This versioned
+  descriptor is an experimental extension, not an upstream-defined boot ABI.
+  The loader sets the unmeasured handoff's DTB address and enabled flag before
+  launching at the descriptor's DRTM entry point. The target kernel calls
+  UNPROTECT_MEMORY; the loader must not release protection before entry.
 
 - Prior to v3.17, the endianness of text_offset was not specified.  In
   these cases image_size is zero and text_offset is 0x80000 in the

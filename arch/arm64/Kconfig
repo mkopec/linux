@@ -2545,16 +2545,18 @@ config EFI
 
 config ARM64_DRTM
 	bool "Arm Dynamic Root of Trust for Measurement support"
-	depends on EFI
+	depends on !CPU_BIG_ENDIAN
 	select CRYPTO
 	select CRYPTO_SHA256
 	select CRYPTO_SHA512
-	select EFI_STUB_DRTM
+	select EFI_STUB_DRTM if EFI
 	help
 	  Support launching Linux as a Dynamically Launched Measured
-	  Environment (DLME) using Arm's DEN0113 DRTM specification. Requires
-	  booting through the EFI stub. The drtm= kernel command line option
-	  enables or disables the launch at boot.
+	  Environment (DLME) using Arm's DEN0113 DRTM specification, either
+	  through the EFI stub or an external DRTM-capable loader such as
+	  u-root. The Image includes a descriptor for non-EFI loaders.
+	  The drtm= kernel command line option controls the EFI stub's launch
+	  policy; external loaders implement their own launch policy.
 
 	  If unsure, say N. This option is EXPERIMENTAL and does not yet provide
 	  security.

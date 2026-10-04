@@ -11,6 +11,13 @@
 #define EFI_IMAGE_INFO_SIZE	8
 #endif
 
+/*
+ * struct arm64_drtm_image_desc, see below. "DRTM" read as a little endian u32.
+ */
+#define ARM64_DRTM_IMAGE_DESC_MAGIC	0x4d545244
+#define ARM64_DRTM_IMAGE_DESC_VERSION	1
+#define ARM64_DRTM_IMAGE_DESC_SIZE	40
+
 #define ARM64_IMAGE_FLAG_BE_SHIFT		0
 #define ARM64_IMAGE_FLAG_PAGE_SIZE_SHIFT	(ARM64_IMAGE_FLAG_BE_SHIFT + 1)
 #define ARM64_IMAGE_FLAG_PHYS_BASE_SHIFT \
@@ -41,6 +48,7 @@
  * @text_offset:	Image load offset
  * @image_size:		Effective Image size
  * @flags:		kernel flags
+ * @drtm_desc:		offset of struct arm64_drtm_image_desc, or 0
  * @reserved:		reserved
  * @magic:		Magic number
  * @reserved5:		reserved, or
@@ -53,7 +61,7 @@ struct arm64_image_header {
 	__le64 text_offset;
 	__le64 image_size;
 	__le64 flags;
-	__le64 res2;
+	__le64 drtm_desc;
 	__le64 res3;
 	__le64 res4;
 	__le32 magic;
@@ -74,6 +82,28 @@ struct efi_image_info {
 #endif
 };
 static_assert(sizeof(struct efi_image_info) == EFI_IMAGE_INFO_SIZE);
+
+/*
+ * Describes the DEN0113 DLME layout of an Image built with CONFIG_ARM64_DRTM so
+ * that a loader outside of the kernel build, such as u-root, can launch it.
+ * Unlike struct efi_image_info this is a versioned experimental format: it is
+ * found through arm64_image_header::drtm_desc and is identified by its magic
+ * and version. All offsets are relative to the start
+ * of Image, see arch/arm64/kernel/vmlinux.lds.S for the layout.
+ *
+ * The descriptor is emitted by the linker in the kernel's endianness, loaders
+ * only accept little endian Images.
+ */
+struct arm64_drtm_image_desc {
+	__le32 magic;
+	__le32 version;
+	__le64 measured_start;
+	__le64 measured_size;
+	__le64 entry;
+	__le64 handoff;
+};
+static_assert(sizeof(struct arm64_drtm_image_desc) ==
+	      ARM64_DRTM_IMAGE_DESC_SIZE);
 
 #endif /* __ASSEMBLER__ */
 

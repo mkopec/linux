@@ -307,6 +307,19 @@ SECTIONS
 			EFI_IMAGE_INFO_OFFSET(arm64_drtm_handoff);
 #endif
 		)
+#ifdef CONFIG_ARM64_DRTM
+		/* struct arm64_drtm_image_desc, for non-EFI loaders like kexec */
+		. = ALIGN(8);
+		__drtm_image_desc = .;
+		LONG(ARM64_DRTM_IMAGE_DESC_MAGIC)
+		LONG(ARM64_DRTM_IMAGE_DESC_VERSION)
+		QUAD(__drtm_measured_start - _text)
+		QUAD(__drtm_measured_end - __drtm_measured_start)
+		QUAD(drtm_entry - _text)
+		QUAD(arm64_drtm_handoff - _text)
+		ASSERT(. - __drtm_image_desc == ARM64_DRTM_IMAGE_DESC_SIZE,
+		       "invalid DRTM image descriptor size");
+#endif
 	}
 	.exit.data : {
 		EXIT_DATA
@@ -474,6 +487,9 @@ ASSERT(__idmap_text_end - (__idmap_text_start & ~(SZ_4K - 1)) <= SZ_4K,
 #ifdef CONFIG_ARM64_DRTM
 ASSERT(drtm_entry >= __drtm_measured_start && drtm_entry < __drtm_measured_end,
 	"DRTM entry is outside the measured image")
+ASSERT(__drtm_image_desc >= __drtm_measured_start &&
+       __drtm_image_desc + ARM64_DRTM_IMAGE_DESC_SIZE <= __drtm_measured_end,
+	"DRTM image descriptor is outside the measured image")
 #endif
 #ifdef CONFIG_HIBERNATION
 ASSERT(__hibernate_exit_text_end - __hibernate_exit_text_start <= SZ_4K,

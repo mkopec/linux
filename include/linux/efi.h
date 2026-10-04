@@ -35,7 +35,7 @@ struct screen_info;
  * measured sections. The offset of such data can be passed to both EFI stubs
  * using a mechanism like struct efi_image_info.
  */
-#ifdef CONFIG_EFI_STUB_DRTM
+#if defined(CONFIG_EFI_STUB_DRTM) || defined(CONFIG_ARM64_DRTM)
 #define __efi_data_handoff	__section(".unmeasured.data")
 #else
 #define __efi_data_handoff	__section(".data")
