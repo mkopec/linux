@@ -85,6 +85,7 @@ struct mtk_dp_audio_cfg {
 
 struct mtk_dp_info {
 	enum dp_pixelformat format;
+	unsigned int bpc;
 	struct videomode vm;
 	struct mtk_dp_audio_cfg audio_cur_cfg;
 };
@@ -574,14 +575,22 @@ static int mtk_dp_set_color_format(struct mtk_dp *mtk_dp,
 
 static void mtk_dp_set_color_depth(struct mtk_dp *mtk_dp)
 {
-	/* Only support 8 bits currently */
+	u32 misc0, depth;
+
+	if (mtk_dp->info.bpc == 10) {
+		misc0 = DP_MSA_MISC_10_BPC;
+		depth = VIDEO_COLOR_DEPTH_DP_ENC0_P0_10BIT;
+	} else {
+		misc0 = DP_MSA_MISC_8_BPC;
+		depth = VIDEO_COLOR_DEPTH_DP_ENC0_P0_8BIT;
+	}
+
 	/* Update MISC0 */
 	mtk_dp_update_bits(mtk_dp, MTK_DP_ENC0_P0_3034,
-			   DP_MSA_MISC_8_BPC, DP_TEST_BIT_DEPTH_MASK);
+			   misc0, DP_TEST_BIT_DEPTH_MASK);
 
 	mtk_dp_update_bits(mtk_dp, MTK_DP_ENC0_P0_303C,
-			   VIDEO_COLOR_DEPTH_DP_ENC0_P0_8BIT,
-			   VIDEO_COLOR_DEPTH_DP_ENC0_P0_MASK);
+			   depth, VIDEO_COLOR_DEPTH_DP_ENC0_P0_MASK);
 }
 
 static void mtk_dp_config_mn_mode(struct mtk_dp *mtk_dp)
@@ -1431,6 +1440,7 @@ static void mtk_dp_initialize_priv_data(struct mtk_dp *mtk_dp)
 	mtk_dp->train_info.cable_plugged_in = plugged_in;
 
 	mtk_dp->info.format = DP_PIXELFORMAT_RGB;
+	mtk_dp->info.bpc = 8;
 	memset(&mtk_dp->info.vm, 0, sizeof(struct videomode));
 	mtk_dp->audio_enable = false;
 }
@@ -2515,8 +2525,23 @@ static u32 *mtk_dp_bridge_atomic_get_input_bus_fmts(struct drm_bridge *bridge,
 	u32 lane_count_min = mtk_dp->train_info.lane_count;
 	u32 rate = drm_dp_bw_code_to_link_rate(mtk_dp->train_info.link_rate) *
 		   lane_count_min;
+	bool use_10bpc = display_info->bpc >= 10 &&
+			 conn_state->max_requested_bpc >= 10 &&
+			 (rate * 97 / 100) >= (mode->clock * 30 / 8);
 
 	*num_input_fmts = 0;
+
+	if (use_10bpc) {
+		input_fmts = kcalloc(ARRAY_SIZE(mt8195_input_fmts) + 1,
+				     sizeof(*input_fmts), GFP_KERNEL);
+		if (!input_fmts)
+			return NULL;
+
+		input_fmts[0] = MEDIA_BUS_FMT_RGB101010_1X30;
+		memcpy(&input_fmts[1], mt8195_input_fmts, sizeof(mt8195_input_fmts));
+		*num_input_fmts = ARRAY_SIZE(mt8195_input_fmts) + 1;
+		return input_fmts;
+	}
 
 	/*
 	 * If the linkrate is smaller than datarate of RGB888, larger than
@@ -2564,6 +2589,11 @@ static int mtk_dp_bridge_atomic_check(struct drm_bridge *bridge,
 		mtk_dp->info.format = DP_PIXELFORMAT_YUV422;
 	else
 		mtk_dp->info.format = DP_PIXELFORMAT_RGB;
+
+	if (input_bus_format == MEDIA_BUS_FMT_RGB101010_1X30)
+		mtk_dp->info.bpc = 10;
+	else
+		mtk_dp->info.bpc = 8;
 
 	if (!crtc) {
 		drm_err(mtk_dp->drm_dev,
@@ -2821,6 +2851,7 @@ static int mtk_dp_probe(struct platform_device *pdev)
 
 	mtk_dp->bridge.of_node = dev->of_node;
 	mtk_dp->bridge.type = mtk_dp->data->bridge_type;
+	mtk_dp->bridge.max_bpc = 10;
 
 	if (mtk_dp->bridge.type == DRM_MODE_CONNECTOR_eDP) {
 		/*
