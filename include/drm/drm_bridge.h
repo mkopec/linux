@@ -1089,9 +1089,10 @@ struct drm_bridge {
 	unsigned int supported_formats;
 
 	/**
-	 * @max_bpc: Maximum bits per char the HDMI bridge supports. Allowed
-	 * values are 8, 10 and 12. This is only relevant if
-	 * @DRM_BRIDGE_OP_HDMI is set.
+	 * @max_bpc: Maximum bits per char the bridge supports. Allowed
+	 * values are 8, 10 and 12. For bridges without @DRM_BRIDGE_OP_HDMI,
+	 * a value above 8 makes the bridge connector expose the "max bpc"
+	 * property.
 	 */
 	unsigned int max_bpc;
 

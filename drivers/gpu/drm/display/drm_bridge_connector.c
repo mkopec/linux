@@ -276,9 +276,13 @@ drm_bridge_connector_create_state(struct drm_connector *connector)
 	if (IS_ERR(conn_state))
 		return conn_state;
 
-	if (bridge_connector->bridge_hdmi)
+	if (bridge_connector->bridge_hdmi) {
 		__drm_atomic_helper_connector_hdmi_state_init(connector,
 							      conn_state);
+	} else if (connector->max_bpc) {
+		conn_state->max_bpc = connector->max_bpc;
+		conn_state->max_requested_bpc = connector->max_bpc;
+	}
 
 	return conn_state;
 }
@@ -912,6 +916,8 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 				supported_formats = bridge->supported_formats;
 			if (bridge->max_bpc)
 				max_bpc = bridge->max_bpc;
+		} else if (bridge->max_bpc) {
+			max_bpc = bridge->max_bpc;
 		}
 
 		if (bridge->ops & DRM_BRIDGE_OP_HDMI_AUDIO) {
@@ -1026,6 +1032,22 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 					  connector_type, ddc);
 		if (ret)
 			return ERR_PTR(ret);
+
+		if (max_bpc > 8) {
+			struct drm_connector_state *state;
+
+			/*
+			 * drm_connector_attach_max_bpc_property() requires the
+			 * connector to have a state.
+			 */
+			state = drm_bridge_connector_create_state(connector);
+			if (IS_ERR(state))
+				return ERR_CAST(state);
+			connector->state = state;
+
+			connector->max_bpc = max_bpc;
+			drm_connector_attach_max_bpc_property(connector, 8, max_bpc);
+		}
 	}
 
 	if (bridge_connector->bridge_hdmi_audio ||
