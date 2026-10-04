@@ -7,6 +7,7 @@
 #include <drm/display/drm_dp_aux_bus.h>
 #include <drm/display/drm_dp.h>
 #include <drm/display/drm_dp_helper.h>
+#include <drm/display/drm_hdmi_helper.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_crtc.h>
@@ -51,6 +52,7 @@
 #define MTK_DP_TRAIN_DOWNSCALE_RETRY 10
 #define MTK_DP_VERSION 0x11
 #define MTK_DP_SDP_AUI 0x4
+#define MTK_DP_SDP_DRM 0x10
 
 enum {
 	MTK_DP_CAL_GLB_BIAS_TRIM = 0,
@@ -752,12 +754,17 @@ static void mtk_dp_audio_set_divider(struct mtk_dp *mtk_dp)
 			   AUDIO_M_CODE_MULT_DIV_SEL_DP_ENC0_P0_MASK);
 }
 
-static void mtk_dp_sdp_trigger_aui(struct mtk_dp *mtk_dp)
+static void mtk_dp_sdp_trigger(struct mtk_dp *mtk_dp, u8 type)
 {
 	mtk_dp_update_bits(mtk_dp, MTK_DP_ENC1_P0_3280,
-			   MTK_DP_SDP_AUI, SDP_PACKET_TYPE_DP_ENC1_P0_MASK);
+			   type, SDP_PACKET_TYPE_DP_ENC1_P0_MASK);
 	mtk_dp_update_bits(mtk_dp, MTK_DP_ENC1_P0_3280,
 			   SDP_PACKET_W_DP_ENC1_P0, SDP_PACKET_W_DP_ENC1_P0);
+}
+
+static void mtk_dp_sdp_trigger_aui(struct mtk_dp *mtk_dp)
+{
+	mtk_dp_sdp_trigger(mtk_dp, MTK_DP_SDP_AUI);
 }
 
 static void mtk_dp_sdp_set_data(struct mtk_dp *mtk_dp, u8 *data_bytes)
@@ -1538,6 +1545,52 @@ static void mtk_dp_setup_tu(struct mtk_dp *mtk_dp)
 	mtk_dp_audio_sample_arrange_disable(mtk_dp);
 	mtk_dp_sdp_set_down_cnt_init_in_hblank(mtk_dp);
 	mtk_dp_sdp_set_down_cnt_init(mtk_dp, sram_read_start);
+}
+
+static void mtk_dp_disable_sdp_drm(struct mtk_dp *mtk_dp)
+{
+	mtk_dp_update_bits(mtk_dp, MTK_DP_ENC0_P0_31DC, 0,
+			   HDR0_CFG_DP_ENC0_P0_MASK);
+}
+
+static void mtk_dp_setup_sdp_drm(struct mtk_dp *mtk_dp,
+				 struct drm_connector_state *conn_state)
+{
+	u8 buf[HDMI_INFOFRAME_HEADER_SIZE + HDMI_DRM_INFOFRAME_SIZE];
+	struct hdmi_drm_infoframe frame;
+	struct dp_sdp sdp = {};
+	ssize_t len;
+
+	mtk_dp_disable_sdp_drm(mtk_dp);
+
+	if (!conn_state || !conn_state->hdr_output_metadata)
+		return;
+
+	if (drm_hdmi_infoframe_set_hdr_metadata(&frame, conn_state))
+		return;
+
+	len = hdmi_drm_infoframe_pack_only(&frame, buf, sizeof(buf));
+	if (len < 0)
+		return;
+
+	/* DP 1.4a, 2.2.5.6.9: CTA-861 DRM infoframe in an SDP */
+	sdp.sdp_header.HB0 = 0;
+	sdp.sdp_header.HB1 = frame.type;
+	sdp.sdp_header.HB2 = 0x1d;
+	sdp.sdp_header.HB3 = 0x13 << 2;
+	sdp.db[0] = frame.version;
+	sdp.db[1] = frame.length;
+	memcpy(&sdp.db[2], &buf[HDMI_INFOFRAME_HEADER_SIZE],
+	       HDMI_DRM_INFOFRAME_SIZE);
+
+	mtk_dp_bulk_16bit_write(mtk_dp, MTK_DP_ENC1_P0_3200, sdp.db,
+				sizeof(sdp.db));
+	mtk_dp_bulk_16bit_write(mtk_dp, MTK_DP_ENC0_P0_3138,
+				(u8 *)&sdp.sdp_header, 4);
+	mtk_dp_sdp_trigger(mtk_dp, MTK_DP_SDP_DRM);
+	/* Enable periodic sending */
+	mtk_dp_update_bits(mtk_dp, MTK_DP_ENC0_P0_31DC, 0x05,
+			   HDR0_CFG_DP_ENC0_P0_MASK);
 }
 
 static void mtk_dp_set_tx_out(struct mtk_dp *mtk_dp)
@@ -2418,6 +2471,9 @@ static void mtk_dp_bridge_atomic_enable(struct drm_bridge *bridge,
 
 	mtk_dp_video_enable(mtk_dp, true);
 
+	mtk_dp_setup_sdp_drm(mtk_dp,
+			     drm_atomic_get_new_connector_state(state, mtk_dp->conn));
+
 	mtk_dp->audio_enable =
 		mtk_dp_edid_parse_audio_capabilities(mtk_dp,
 						     &mtk_dp->info.audio_cur_cfg);
@@ -2454,6 +2510,7 @@ static void mtk_dp_bridge_atomic_disable(struct drm_bridge *bridge,
 	mtk_dp_update_plugged_status(mtk_dp);
 	mtk_dp_video_enable(mtk_dp, false);
 	mtk_dp_audio_mute(mtk_dp, true);
+	mtk_dp_disable_sdp_drm(mtk_dp);
 
 	/* SDP path reset sw*/
 	mtk_dp_sdp_path_reset(mtk_dp);
@@ -2852,6 +2909,9 @@ static int mtk_dp_probe(struct platform_device *pdev)
 	mtk_dp->bridge.of_node = dev->of_node;
 	mtk_dp->bridge.type = mtk_dp->data->bridge_type;
 	mtk_dp->bridge.max_bpc = 10;
+	mtk_dp->bridge.supported_colorspaces =
+		BIT(DRM_MODE_COLORIMETRY_DEFAULT) |
+		BIT(DRM_MODE_COLORIMETRY_BT2020_RGB);
 
 	if (mtk_dp->bridge.type == DRM_MODE_CONNECTOR_eDP) {
 		/*
