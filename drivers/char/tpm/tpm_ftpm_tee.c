@@ -141,9 +141,68 @@ static int ftpm_tee_tpm_op_send(struct tpm_chip *chip, u8 *buf, size_t bufsiz,
 	return resp_len;
 }
 
+static int ftpm_tee_invoke_locality(struct tpm_chip *chip, u32 func, int loc)
+{
+	struct ftpm_tee_private *pvt_data = dev_get_drvdata(chip->dev.parent);
+	struct tee_ioctl_invoke_arg args = {
+		.func = func,
+		.session = pvt_data->session,
+		.num_params = 4,
+	};
+	struct tee_param params[4] = {};
+	int rc;
+
+	if (func == FTPM_OPTEE_TA_REQUEST_LOCALITY) {
+		params[0].attr = TEE_IOCTL_PARAM_ATTR_TYPE_VALUE_INPUT;
+		params[0].u.value.a = loc;
+	}
+
+	rc = tee_client_invoke_func(pvt_data->ctx, &args, params);
+	if (rc < 0)
+		return rc;
+
+	switch (args.ret) {
+	case 0:
+		return 0;
+	case FTPM_TEE_ERROR_ACCESS_DENIED:
+		return -EACCES;
+	default:
+		/* The TA doesn't implement localities */
+		return -EOPNOTSUPP;
+	}
+}
+
+/*
+ * The fTPM TA executes the commands at locality 0 unless a kernel session
+ * selects another one. It only allows the dynamic localities while a dynamic
+ * launch has them open, and locality 4 never. Locality 0 is the default, so
+ * TAs without localities keep working.
+ */
+static int ftpm_tee_request_locality(struct tpm_chip *chip, int loc)
+{
+	int rc;
+
+	if (!loc)
+		return 0;
+
+	rc = ftpm_tee_invoke_locality(chip, FTPM_OPTEE_TA_REQUEST_LOCALITY, loc);
+	return rc ? rc : loc;
+}
+
+static int ftpm_tee_relinquish_locality(struct tpm_chip *chip, int loc)
+{
+	if (!loc)
+		return 0;
+
+	return ftpm_tee_invoke_locality(chip, FTPM_OPTEE_TA_RELINQUISH_LOCALITY,
+					loc);
+}
+
 static const struct tpm_class_ops ftpm_tee_tpm_ops = {
 	.flags = TPM_OPS_AUTO_STARTUP,
 	.send = ftpm_tee_tpm_op_send,
+	.request_locality = ftpm_tee_request_locality,
+	.relinquish_locality = ftpm_tee_relinquish_locality,
 };
 
 /*
@@ -196,7 +255,8 @@ static int ftpm_tee_probe_generic(struct device *dev)
 	/* Open a session with fTPM TA */
 	memset(&sess_arg, 0, sizeof(sess_arg));
 	export_uuid(sess_arg.uuid, &ftpm_ta_uuid);
-	sess_arg.clnt_login = TEE_IOCTL_LOGIN_PUBLIC;
+	/* The TA only lets the kernel use localities other than 0. */
+	sess_arg.clnt_login = TEE_IOCTL_LOGIN_REE_KERNEL;
 	sess_arg.num_params = 0;
 
 	rc = tee_client_open_session(pvt_data->ctx, &sess_arg, NULL);

@@ -13,6 +13,11 @@
 /* The TAFs ID implemented in this TA */
 #define FTPM_OPTEE_TA_SUBMIT_COMMAND  (0)
 #define FTPM_OPTEE_TA_EMULATE_PPI     (1)
+#define FTPM_OPTEE_TA_REQUEST_LOCALITY    (2)
+#define FTPM_OPTEE_TA_RELINQUISH_LOCALITY (3)
+
+/* GlobalPlatform TEE Client API result of a denied locality */
+#define FTPM_TEE_ERROR_ACCESS_DENIED  0xFFFF0001
 
 /* max. buffer size supported by fTPM  */
 #define MAX_COMMAND_SIZE       4096
