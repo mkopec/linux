@@ -37,14 +37,14 @@ const struct class tpmrm_class = {
 };
 dev_t tpm_devt;
 
-static int tpm_request_locality(struct tpm_chip *chip)
+static int tpm_request_locality(struct tpm_chip *chip, int loc)
 {
 	int rc;
 
 	if (!chip->ops->request_locality)
-		return 0;
+		return loc ? -EOPNOTSUPP : 0;
 
-	rc = chip->ops->request_locality(chip, 0);
+	rc = chip->ops->request_locality(chip, loc);
 	if (rc < 0)
 		return rc;
 
@@ -94,26 +94,21 @@ static void tpm_clk_disable(struct tpm_chip *chip)
 		chip->ops->clk_enable(chip, false);
 }
 
-/**
- * tpm_chip_start() - power on the TPM
- * @chip:	a TPM chip to use
- *
- * Return:
- * * The response length	- OK
- * * -errno			- A system error
- */
-int tpm_chip_start(struct tpm_chip *chip)
+static int tpm_chip_start_locality(struct tpm_chip *chip, int loc)
 {
 	int ret;
 
 	tpm_clk_enable(chip);
 
 	if (chip->locality == -1) {
-		ret = tpm_request_locality(chip);
+		ret = tpm_request_locality(chip, loc);
 		if (ret) {
 			tpm_clk_disable(chip);
 			return ret;
 		}
+	} else if (loc && chip->locality != loc) {
+		tpm_clk_disable(chip);
+		return -EBUSY;
 	}
 
 	ret = tpm_cmd_ready(chip);
@@ -124,6 +119,19 @@ int tpm_chip_start(struct tpm_chip *chip)
 	}
 
 	return 0;
+}
+
+/**
+ * tpm_chip_start() - power on the TPM
+ * @chip:	a TPM chip to use
+ *
+ * Return:
+ * * The response length	- OK
+ * * -errno			- A system error
+ */
+int tpm_chip_start(struct tpm_chip *chip)
+{
+	return tpm_chip_start_locality(chip, 0);
 }
 EXPORT_SYMBOL_GPL(tpm_chip_start);
 
@@ -156,7 +164,28 @@ EXPORT_SYMBOL_GPL(tpm_chip_stop);
  */
 int tpm_try_get_ops(struct tpm_chip *chip)
 {
+	return tpm_try_get_ops_locality(chip, 0);
+}
+EXPORT_SYMBOL_GPL(tpm_try_get_ops);
+
+/**
+ * tpm_try_get_ops_locality() - Get a ref to the tpm_chip at a locality
+ * @chip: Chip to ref
+ * @loc: Locality of the commands until tpm_put_ops()
+ *
+ * As tpm_try_get_ops(), but the following commands execute at locality @loc
+ * instead of 0. This requires a driver that implements localities, and the
+ * TPM may deny some of them, e.g. the dynamic localities outside of a dynamic
+ * launch.
+ *
+ * Returns -ERRNO if the chip could not be got.
+ */
+int tpm_try_get_ops_locality(struct tpm_chip *chip, int loc)
+{
 	int rc = -EIO;
+
+	if (loc < 0 || loc > TPM_MAX_LOCALITY)
+		return -EINVAL;
 
 	if (chip->flags & TPM_CHIP_FLAG_DISABLE)
 		return rc;
@@ -173,7 +202,7 @@ int tpm_try_get_ops(struct tpm_chip *chip)
 	if (chip->flags & TPM_CHIP_FLAG_SUSPENDED)
 		goto out_lock;
 
-	rc = tpm_chip_start(chip);
+	rc = tpm_chip_start_locality(chip, loc);
 	if (rc)
 		goto out_lock;
 
@@ -185,7 +214,6 @@ out_ops:
 	put_device(&chip->dev);
 	return rc;
 }
-EXPORT_SYMBOL_GPL(tpm_try_get_ops);
 
 /**
  * tpm_put_ops() - Release a ref to the tpm_chip

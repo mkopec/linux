@@ -372,13 +372,33 @@ EXPORT_SYMBOL_GPL(tpm_pcr_read);
 int tpm_pcr_extend(struct tpm_chip *chip, u32 pcr_idx,
 		   struct tpm_digest *digests)
 {
+	return tpm_pcr_extend_locality(chip, TPM_LOCALITY_0, pcr_idx, digests);
+}
+EXPORT_SYMBOL_GPL(tpm_pcr_extend);
+
+/**
+ * tpm_pcr_extend_locality - extend a PCR value at a locality
+ * @chip:	a &struct tpm_chip instance
+ * @locality:	the locality to extend the PCR at
+ * @pcr_idx:	the PCR to be extended
+ * @digests:	array of tpm_digest structures used to extend PCRs
+ *
+ * As tpm_pcr_extend(), for PCRs that can't be extended at locality 0, such
+ * as the PCRs of a dynamic launch. Localities other than 0 require a driver
+ * that implements them.
+ *
+ * Return: same as with tpm_transmit_cmd()
+ */
+int tpm_pcr_extend_locality(struct tpm_chip *chip, u8 locality, u32 pcr_idx,
+			    struct tpm_digest *digests)
+{
 	int rc;
 	int i;
 
 	if (!chip)
 		return -ENODEV;
 
-	rc = tpm_try_get_ops(chip);
+	rc = tpm_try_get_ops_locality(chip, locality);
 	if (rc)
 		return rc;
 
@@ -401,7 +421,7 @@ out:
 	tpm_put_ops(chip);
 	return rc;
 }
-EXPORT_SYMBOL_GPL(tpm_pcr_extend);
+EXPORT_SYMBOL_GPL(tpm_pcr_extend_locality);
 
 int tpm_auto_startup(struct tpm_chip *chip)
 {
