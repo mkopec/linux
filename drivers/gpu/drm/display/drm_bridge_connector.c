@@ -410,9 +410,27 @@ static int drm_bridge_connector_atomic_check(struct drm_connector *connector,
 {
 	struct drm_bridge_connector *bridge_connector =
 		to_drm_bridge_connector(connector);
+	struct drm_connector_state *old_conn_state, *new_conn_state;
+	struct drm_crtc_state *crtc_state;
 
 	if (bridge_connector->bridge_hdmi)
 		return drm_atomic_helper_connector_hdmi_check(connector, state);
+
+	old_conn_state = drm_atomic_get_old_connector_state(state, connector);
+	new_conn_state = drm_atomic_get_new_connector_state(state, connector);
+	if (!new_conn_state->crtc)
+		return 0;
+
+	if (old_conn_state->colorspace == new_conn_state->colorspace &&
+	    old_conn_state->max_requested_bpc == new_conn_state->max_requested_bpc &&
+	    drm_connector_atomic_hdr_metadata_equal(old_conn_state, new_conn_state))
+		return 0;
+
+	crtc_state = drm_atomic_get_crtc_state(state, new_conn_state->crtc);
+	if (IS_ERR(crtc_state))
+		return PTR_ERR(crtc_state);
+
+	crtc_state->mode_changed = true;
 
 	return 0;
 }
@@ -803,6 +821,23 @@ static void drm_bridge_connector_put_bridges(struct drm_device *dev, void *data)
 	drm_bridge_put(bridge_connector->bridge_hdmi_cec);
 }
 
+static int drm_bridge_connector_attach_colorspace(struct drm_connector *connector,
+						  int connector_type,
+						  u32 colorspaces)
+{
+	int ret;
+
+	if (connector_type == DRM_MODE_CONNECTOR_DisplayPort ||
+	    connector_type == DRM_MODE_CONNECTOR_eDP)
+		ret = drm_mode_create_dp_colorspace_property(connector, colorspaces);
+	else
+		ret = drm_mode_create_hdmi_colorspace_property(connector, colorspaces);
+	if (ret)
+		return ret;
+
+	return drm_connector_attach_colorspace_property(connector);
+}
+
 /**
  * drm_bridge_connector_init - Initialise a connector for a chain of bridges
  * @drm: the DRM device
@@ -829,6 +864,7 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 	struct drm_bridge *panel_bridge __free(drm_bridge_put) = NULL;
 	unsigned int supported_formats = BIT(DRM_OUTPUT_COLOR_FORMAT_RGB444);
 	unsigned int max_bpc = 8;
+	u32 supported_colorspaces = 0;
 	bool support_hdcp = false;
 	int connector_type;
 	int ret;
@@ -916,8 +952,11 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 				supported_formats = bridge->supported_formats;
 			if (bridge->max_bpc)
 				max_bpc = bridge->max_bpc;
-		} else if (bridge->max_bpc) {
-			max_bpc = bridge->max_bpc;
+		} else {
+			if (bridge->max_bpc)
+				max_bpc = bridge->max_bpc;
+			if (bridge->supported_colorspaces)
+				supported_colorspaces = bridge->supported_colorspaces;
 		}
 
 		if (bridge->ops & DRM_BRIDGE_OP_HDMI_AUDIO) {
@@ -1047,6 +1086,15 @@ struct drm_connector *drm_bridge_connector_init(struct drm_device *drm,
 
 			connector->max_bpc = max_bpc;
 			drm_connector_attach_max_bpc_property(connector, 8, max_bpc);
+			drm_connector_attach_hdr_output_metadata_property(connector);
+		}
+
+		if (supported_colorspaces) {
+			ret = drm_bridge_connector_attach_colorspace(connector,
+								     connector_type,
+								     supported_colorspaces);
+			if (ret)
+				return ERR_PTR(ret);
 		}
 	}
 

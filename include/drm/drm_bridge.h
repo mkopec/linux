@@ -1097,6 +1097,14 @@ struct drm_bridge {
 	unsigned int max_bpc;
 
 	/**
+	 * @supported_colorspaces: Bitmask of the DRM_MODE_COLORIMETRY_*
+	 * values the bridge can signal to the sink. For bridges without
+	 * @DRM_BRIDGE_OP_HDMI, a non-zero value makes the bridge connector
+	 * expose the "Colorspace" property.
+	 */
+	u32 supported_colorspaces;
+
+	/**
 	 * @hdmi_cec_dev: device to be used as a containing device for CEC
 	 * functions.
 	 */
