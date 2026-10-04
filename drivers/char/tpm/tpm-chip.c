@@ -231,6 +231,36 @@ void tpm_put_ops(struct tpm_chip *chip)
 }
 EXPORT_SYMBOL_GPL(tpm_put_ops);
 
+static BLOCKING_NOTIFIER_HEAD(tpm_chip_notifier_list);
+
+/**
+ * tpm_register_chip_notifier() - get notified of new TPM chips
+ * @nb: notifier block, called with &enum tpm_chip_event and the chip
+ *
+ * The notifier is called for the chips registered afterwards, with
+ * %TPM_CHIP_ADD once the chip is started up and before user space can access
+ * it, e.g. to extend PCRs before anything else can.
+ *
+ * Return: 0 or -ERRNO.
+ */
+int tpm_register_chip_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_register(&tpm_chip_notifier_list, nb);
+}
+EXPORT_SYMBOL_GPL(tpm_register_chip_notifier);
+
+/**
+ * tpm_unregister_chip_notifier() - stop notifications of new TPM chips
+ * @nb: notifier block passed to tpm_register_chip_notifier()
+ *
+ * Return: 0 or -ERRNO.
+ */
+int tpm_unregister_chip_notifier(struct notifier_block *nb)
+{
+	return blocking_notifier_chain_unregister(&tpm_chip_notifier_list, nb);
+}
+EXPORT_SYMBOL_GPL(tpm_unregister_chip_notifier);
+
 /**
  * tpm_default_chip() - find a TPM chip and get a reference to it
  */
@@ -619,6 +649,8 @@ int tpm_chip_register(struct tpm_chip *chip)
 	rc = tpm_chip_bootstrap(chip);
 	if (rc)
 		return rc;
+
+	blocking_notifier_call_chain(&tpm_chip_notifier_list, TPM_CHIP_ADD, chip);
 
 	tpm_sysfs_add_device(chip);
 

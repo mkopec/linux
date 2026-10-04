@@ -22,6 +22,7 @@
 #include <linux/cdev.h>
 #include <linux/fs.h>
 #include <linux/highmem.h>
+#include <linux/notifier.h>
 #include <crypto/hash_info.h>
 #include <crypto/aes.h>
 
@@ -184,6 +185,12 @@ static inline enum tpm2_mso_type tpm2_handle_mso(u32 handle)
 #define TPM_VID_ATML     0x1114
 #define TPM_VID_IFX      0x15D1
 
+/* Events of tpm_register_chip_notifier(), the data is the chip */
+enum tpm_chip_event {
+	/* The chip is started up, but not available to user space yet */
+	TPM_CHIP_ADD,
+};
+
 enum tpm_chip_flags {
 	TPM_CHIP_FLAG_BOOTSTRAPPED		= BIT(0),
 	TPM_CHIP_FLAG_TPM2			= BIT(1),
@@ -254,6 +261,8 @@ int tpm_pcr_extend_locality(struct tpm_chip *chip, u8 locality, u32 pcr_idx,
 			    struct tpm_digest *digests);
 extern int tpm_get_random(struct tpm_chip *chip, u8 *data, size_t max);
 extern struct tpm_chip *tpm_default_chip(void);
+int tpm_register_chip_notifier(struct notifier_block *nb);
+int tpm_unregister_chip_notifier(struct notifier_block *nb);
 void tpm2_flush_context(struct tpm_chip *chip, u32 handle);
 int tpm2_find_hash_alg(unsigned int crypto_id);
 
@@ -298,6 +307,16 @@ static inline int tpm_get_random(struct tpm_chip *chip, u8 *data, size_t max)
 static inline struct tpm_chip *tpm_default_chip(void)
 {
 	return NULL;
+}
+
+static inline int tpm_register_chip_notifier(struct notifier_block *nb)
+{
+	return -ENODEV;
+}
+
+static inline int tpm_unregister_chip_notifier(struct notifier_block *nb)
+{
+	return -ENODEV;
 }
 
 static inline void tpm_buf_append_empty_auth(struct tpm_buf *buf, u32 handle)
