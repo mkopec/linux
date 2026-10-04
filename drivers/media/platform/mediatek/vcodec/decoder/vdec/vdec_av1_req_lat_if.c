@@ -1912,9 +1912,16 @@ static int vdec_av1_slice_init(struct mtk_vcodec_dec_ctx *ctx)
 		goto error_vsi;
 	}
 
-	if (vsi->vsi_size != sizeof(struct vdec_av1_slice_vsi))
-		mtk_vdec_err(ctx, "remote vsi size 0x%x mismatch! expected: 0x%zx\n",
+	/*
+	 * Newer firmware extends the structure at the end, e.g. the MT8188
+	 * SCP firmware in linux-firmware with a size of 0x1d68.
+	 */
+	if (vsi->vsi_size < sizeof(struct vdec_av1_slice_vsi))
+		mtk_vdec_err(ctx, "remote vsi size 0x%x too small! expected: 0x%zx\n",
 			     vsi->vsi_size, sizeof(struct vdec_av1_slice_vsi));
+	else if (vsi->vsi_size > sizeof(struct vdec_av1_slice_vsi))
+		mtk_vdec_debug(ctx, "remote vsi size 0x%x, extends 0x%zx\n",
+			       vsi->vsi_size, sizeof(struct vdec_av1_slice_vsi));
 
 	instance->irq_enabled = 1;
 	instance->inneracing_mode = IS_VDEC_INNER_RACING(instance->ctx->dev->dec_capability);
