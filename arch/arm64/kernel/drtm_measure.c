@@ -27,6 +27,7 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/tpm.h>
+#include <linux/tpm_eventlog.h>
 #include <crypto/sha1.h>
 #include <crypto/sha2.h>
 
@@ -46,6 +47,13 @@ static const char * const drtm_event_names[DRTM_NR_EVENTS] = {
 	[DRTM_EV_CMDLINE] = "command line",
 	[DRTM_EV_DTB] = "device tree",
 	[DRTM_EV_INITRD] = "initramfs",
+};
+
+/* Event data of the events in the DRTM event log */
+static const char * const drtm_event_data[DRTM_NR_EVENTS] = {
+	[DRTM_EV_CMDLINE] = "Linux command line",
+	[DRTM_EV_DTB] = "Linux device tree",
+	[DRTM_EV_INITRD] = "Linux initramfs",
 };
 
 /* The banks that can be extended, the TPM doesn't report its banks yet. */
@@ -119,6 +127,24 @@ static bool drtm_is_launch_tpm(struct tpm_chip *chip)
 	return false;
 }
 
+static void drtm_log(enum drtm_dlme_event ev)
+{
+	struct arm64_drtm_digest digests[ARRAY_SIZE(drtm_algs)];
+	int i, rc;
+
+	for (i = 0; i < ARRAY_SIZE(drtm_algs); i++) {
+		digests[i].alg_id = drtm_algs[i];
+		digests[i].digest = drtm_digests[ev][i];
+	}
+
+	rc = arm64_drtm_log_event(DRTM_DLME_PCR, IPL, digests,
+				  ARRAY_SIZE(digests), drtm_event_data[ev],
+				  strlen(drtm_event_data[ev]) + 1);
+	if (rc && rc != -ENODEV)
+		pr_warn("DRTM: failed to log the %s: %d\n",
+			drtm_event_names[ev], rc);
+}
+
 static int drtm_extend(struct tpm_chip *chip)
 {
 	struct tpm_digest *digests;
@@ -155,6 +181,8 @@ static int drtm_extend(struct tpm_chip *chip)
 			       drtm_event_names[ev], rc);
 			goto out;
 		}
+
+		drtm_log(ev);
 	}
 
 out:
