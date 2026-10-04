@@ -320,5 +320,39 @@ static_assert(offsetof(struct arm64_drtm_handoff, drtm_enabled) ==
 
 extern struct arm64_drtm_handoff arm64_drtm_handoff;
 
+/* v1.4B section 3.15 "DLME data", Table 14, DLME_DATA_HEADER version 1 */
+struct arm_drtm_dlme_data_header {
+	__le16 version;
+	__le16 header_size;
+	__le32 reserved;
+	__le64 data_size;
+	__le64 protected_regions_size;
+	__le64 address_map_size;
+	__le64 event_log_size;
+	__le64 tcb_hash_table_size;
+	__le64 acpi_tables_size;
+	__le64 impdef_size;
+};
+
+static_assert(sizeof(struct arm_drtm_dlme_data_header) == 64);
+
+/* The DLME data follows the kernel image, see vmlinux.lds.S */
+extern char __drtm_dlme_start[];
+
+struct arm64_drtm_digest {
+	u16 alg_id;
+	const u8 *digest;
+};
+
+#ifdef CONFIG_ARM64_DRTM
+void arm64_drtm_reserve(void);
+int arm64_drtm_log_event(u32 pcr, u32 event_type,
+			 const struct arm64_drtm_digest *digests,
+			 unsigned int nr_digests, const void *event,
+			 u32 event_size);
+#else
+static inline void arm64_drtm_reserve(void) {}
+#endif
+
 #endif /* !__ASSEMBLY__ */
 #endif /* __ASM_DRTM_H */
