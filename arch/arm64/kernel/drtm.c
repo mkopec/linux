@@ -6,6 +6,7 @@
 #include <linux/bug.h>
 #include <linux/efi.h>
 #include <linux/init.h>
+#include <linux/initrd.h>
 #include <linux/printk.h>
 
 #include <asm/drtm.h>
@@ -39,6 +40,12 @@ static int __init arm64_drtm_unprotect_memory(void)
 	 * drivers for any DMA devices, those have to be modules to be ordered
 	 * after this.
 	 */
+	/*
+	 * The initramfs is unpacked asynchronously. Devices mustn't be able
+	 * to change it before it has been unpacked.
+	 */
+	wait_for_initramfs();
+
 	status = arm_drtm_unprotect_memory();
 	WARN(status != ARM_DRTM_SUCCESS,
 	     "DRTM: failed to unprotect memory (x0=%lld)", status);
