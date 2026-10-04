@@ -2561,6 +2561,22 @@ config ARM64_DRTM
 	  If unsure, say N. This option is EXPERIMENTAL and does not yet provide
 	  security.
 
+config ARM64_DRTM_MEASURE
+	bool "Measure the DLME configuration"
+	depends on ARM64_DRTM && TCG_TPM=y
+	select CRYPTO_LIB_SHA1
+	select CRYPTO_LIB_SHA256
+	select CRYPTO_LIB_SHA512
+	default y
+	help
+	  The dynamic launch only measures the kernel image. After a launch,
+	  measure the kernel command line, the device tree and the initramfs
+	  into PCR 19 of the TPM that recorded the launch, at locality 2, and
+	  then close locality 2, as Arm DEN0113 expects of the DLME.
+
+	  The TPM driver may be a module, the measurements are extended when
+	  the TPM is registered.
+
 config COMPRESSED_INSTALL
 	bool "Install compressed image by default"
 	help
